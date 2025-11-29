@@ -12,9 +12,9 @@ help:
 generate-models:
 	@echo "🚀 Generating models from JSON schemas..."
 	@if [ -n "$(OUT)" ]; then \
-		zig build -Doptimize=ReleaseFast && zig-out/bin/zig-model-gen ../schemas ../$(OUT); \
+		zig build -Doptimize=ReleaseFast && zig-out/bin/zig-model-gen ./examples/schemas ./$(OUT); \
 	else \
-		zig build -Doptimize=ReleaseFast && zig-out/bin/zig-model-gen ../schemas; \
+		zig build -Doptimize=ReleaseFast && zig-out/bin/zig-model-gen ./examples/schemas ./examples/models/generated; \
 	fi
 	@echo ""
 
