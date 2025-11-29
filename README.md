@@ -28,16 +28,20 @@ bash install.sh
 
 ### Option 2: Zig Package (build.zig.zon)
 
+```bash
+zig fetch --save "git+https://github.com/SOG-web/zig_pg_model_gen"
+```
+
 ```zig
 .dependencies = .{
     .model_gen = .{
-        .url = "https://github.com/your/zig-model-gen/archive/<COMMIT_HASH>.tar.gz",
-        .hash = "<PACKAGE_HASH>",
+        .url = "git+https://github.com/SOG-web/zig_pg_model_gen",
+        .hash = "...", // TODO: Add hash
     },
     // Required for generated models
     .pg = .{
-        .url = "https://github.com/karlseguin/pg.zig/archive/<COMMIT_HASH>.tar.gz",
-        .hash = "...",
+        .url = "git+https://github.com/karlseguin/pg.zig",
+        .hash = "...", // TODO: Add hash
     },
 },
 ```
@@ -149,15 +153,18 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // Dependency
-    const model_gen = b.dependency("model_gen", .{});
-
-    // Generation Step
-    const gen_cmd = b.addRunArtifact(model_gen.artifact("zig-model-gen"));
-    gen_cmd.addArg("schemas");      // Input
-    gen_cmd.addArg("src/models");   // Output
+    const model_gen = b.dependency("zig_pg_model_gen", .{});
 
     // Executable
     const exe = b.addExecutable(.{ ... });
+
+    // Generation Step
+    const gen_cmd = b.addRunArtifact(model_gen.artifact("zig-model-gen"));
+    gen_cmd.addArg("schemas"); // Input
+    gen_cmd.addArg("src/db/models/generated"); // Output
+
+    const gen_step = b.step("gen", "Generate models");
+    gen_step.dependOn(&gen_cmd.step);
 
     // Add pg dependency
     const pg = b.dependency("pg", .{ .target = target, .optimize = optimize });
@@ -166,6 +173,12 @@ pub fn build(b: *std.Build) void {
     // Ensure generation runs before build
     exe.step.dependOn(&gen_cmd.step);
 }
+```
+
+### Usage
+
+```bash
+zig build gen
 ```
 
 ## 📄 Example Schema
