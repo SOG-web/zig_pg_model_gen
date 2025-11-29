@@ -1,34 +1,29 @@
 # Zig Model Generator
 
-A powerful, standalone tool that automatically generates type-safe Zig database models from JSON schema definitions.
+A production-ready, standalone tool that generates type-safe Zig database models from JSON schema definitions. Built on top of `pg.zig`.
 
 ## 🚀 Features
 
-- **Zero Configuration**: Auto-discovers schemas, no manual registration needed.
-- **Type-Safe**: Generates strongly typed Zig structs and CRUD operations.
-- **Self-Contained**: Generated code includes all necessary dependencies (bundles `base.zig`).
-- **Runtime Validation**: Validates schemas before generation to prevent errors.
-- **PostgreSQL Support**: Built on top of `pg.zig`.
-- **Flexible Integration**: Use as a CLI tool, Git submodule, or Zig package.
+- **Zero Boilerplate**: No manual model registration or build configuration required.
+- **Type Safety**: Generates strictly typed Zig structs, including optional handling.
+- **Self-Contained**: Bundles `base.zig` (BaseModel) with generated code, making models portable.
+- **Advanced Schema**: Supports relationships, indexes, soft deletes, and custom input modes.
+- **Full CRUD**: Auto-generates `insert`, `update`, `upsert`, `softDelete`, `hardDelete`, and more.
+- **Query Builder**: Includes a fluent query builder for complex queries.
+- **Runtime Validation**: Validates schemas for types, missing fields, and invalid structures before generation.
 
 ## 📦 Installation
 
-### Option 1: Standalone Binary (Recommended for CLI usage)
-
-Install the binary to your system:
+### Option 1: Standalone Binary (CLI)
 
 ```bash
-# Clone the repo
+# Clone and install
 git clone https://github.com/your/zig-model-gen
 cd zig-model-gen
-
-# Install to ~/.local/bin (or /usr/local/bin)
 bash install.sh
 ```
 
-### Option 2: Zig Package (Recommended for Projects)
-
-Add to your `build.zig.zon`:
+### Option 2: Zig Package (build.zig.zon)
 
 ```zig
 .dependencies = .{
@@ -36,7 +31,7 @@ Add to your `build.zig.zon`:
         .url = "https://github.com/your/zig-model-gen/archive/<COMMIT_HASH>.tar.gz",
         .hash = "<PACKAGE_HASH>",
     },
-    // You also need pg.zig for the generated models
+    // Required for generated models
     .pg = .{
         .url = "https://github.com/karlseguin/pg.zig/archive/<COMMIT_HASH>.tar.gz",
         .hash = "...",
@@ -44,23 +39,189 @@ Add to your `build.zig.zon`:
 },
 ```
 
-## 🛠 Usage
+## � Schema Reference
 
-### CLI Commands
+Create `.json` files in your schemas directory.
 
-```bash
-# Basic usage: zig-model-gen <schemas_dir> [output_dir]
+### Supported Types
 
-# Generate models from 'schemas/' to 'src/models/'
-zig-model-gen schemas src/models
+| JSON Type   | Zig Type     | PostgreSQL Type | Note                   |
+| ----------- | ------------ | --------------- | ---------------------- |
+| `uuid`      | `[]const u8` | `uuid`          |                        |
+| `text`      | `[]const u8` | `text`          |                        |
+| `boolean`   | `bool`       | `boolean`       |                        |
+| `i16`       | `i16`        | `smallint`      |                        |
+| `i32`       | `i32`        | `integer`       |                        |
+| `i64`       | `i64`        | `bigint`        |                        |
+| `timestamp` | `i64`        | `timestamptz`   | Stored as milliseconds |
+| `json`      | `[]const u8` | `jsonb`         | Raw JSON string        |
 
-# Specify custom output directory
-zig-model-gen schemas src/db/generated
+### Field Properties
+
+| Property      | Type   | Default      | Description                             |
+| ------------- | ------ | ------------ | --------------------------------------- |
+| `name`        | string | **Required** | Column name                             |
+| `type`        | string | **Required** | See Supported Types                     |
+| `nullable`    | bool   | `false`      | If true, Zig type is optional (`?T`)    |
+| `primary_key` | bool   | `false`      | Adds `PRIMARY KEY` constraint           |
+| `unique`      | bool   | `false`      | Adds `UNIQUE` constraint                |
+| `default`     | string | `null`       | SQL default value (e.g., `"now()"`)     |
+| `input_mode`  | enum   | `"excluded"` | See Input Modes                         |
+| `redacted`    | bool   | `false`      | Flags field for sensitive data handling |
+
+### Input Modes
+
+Controls how fields appear in `CreateInput` and `UpdateInput` structs.
+
+- `required`: Must be provided in `CreateInput`.
+- `optional`: Optional in `CreateInput` (defaults to null/default).
+- `auto_generated`: Excluded from inputs (e.g., `id`, `created_at`).
+
+### Relationships
+
+Define foreign key relationships in the `relationships` array.
+
+```json
+"relationships": [
+  {
+    "name": "user",
+    "column": "user_id",
+    "references": {
+      "table": "users",
+      "column": "id"
+    },
+    "type": "many_to_one",
+    "on_delete": "CASCADE",
+    "on_update": "NO ACTION"
+  }
+]
 ```
 
-### Writing Schemas
+- **Types**: `many_to_one` (default), `one_to_many`, `one_to_one`, `many_to_many`.
+- **Actions**: `CASCADE`, `SET NULL`, `SET DEFAULT`, `RESTRICT`, `NO ACTION`.
 
-Create JSON files in your schemas directory (e.g., `schemas/user.json`):
+### Indexes
+
+Define database indexes in the `indexes` array.
+
+```json
+"indexes": [
+  {
+    "name": "users_email_idx",
+    "columns": ["email"],
+    "unique": true
+  }
+]
+```
+
+## 💻 Generated API Reference
+
+Each generated model (e.g., `User`) includes the following static methods.
+
+### Core CRUD
+
+```zig
+// Find by ID
+const user = try User.findById(&pool, allocator, "uuid-string");
+
+// Find All (supports soft delete filtering)
+const users = try User.findAll(&pool, allocator, false); // false = hide deleted
+
+// Insert
+const id = try User.insert(&pool, allocator, .{
+    .email = "test@example.com",
+    .name = "Test User",
+});
+
+// Insert and Return Full Object
+const user = try User.insertAndReturn(&pool, allocator, .{ ... });
+
+// Update
+try User.update(&pool, "uuid-string", .{
+    .name = "Updated Name", // Optional fields
+});
+
+// Update and Return
+const updated = try User.updateAndReturn(&pool, allocator, "uuid", .{ ... });
+
+// Upsert (Insert or Update on conflict)
+const id = try User.upsert(&pool, allocator, .{ ... });
+```
+
+### Deletion
+
+```zig
+// Soft Delete (requires 'deleted_at' field in schema)
+try User.softDelete(&pool, "uuid-string");
+
+// Hard Delete (permanent)
+try User.hardDelete(&pool, "uuid-string");
+```
+
+### Query Builder
+
+Fluent API for complex queries.
+
+```zig
+// Returns []UpdateInput (fields marked for update)
+const results = try User.query()
+    .where(.{
+        .field = .age,
+        .operator = .gt,
+        .value = "$1",
+    })
+    .orderBy(.{
+        .field = .created_at,
+        .direction = .desc,
+    })
+    .limit(10)
+    .fetch(&pool, allocator, .{18});
+```
+
+### DDL Operations
+
+```zig
+try User.createTable(&pool);
+try User.createIndexes(&pool);
+try User.dropTable(&pool);
+try User.truncate(&pool);
+const exists = try User.tableExists(&pool);
+```
+
+## 🔌 Integration
+
+### build.zig
+
+```zig
+const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    // Dependency
+    const model_gen = b.dependency("model_gen", .{});
+
+    // Generation Step
+    const gen_cmd = b.addRunArtifact(model_gen.artifact("zig-model-gen"));
+    gen_cmd.addArg("schemas");      // Input
+    gen_cmd.addArg("src/models");   // Output
+
+    // Executable
+    const exe = b.addExecutable(.{ ... });
+
+    // Add pg dependency
+    const pg = b.dependency("pg", .{ .target = target, .optimize = optimize });
+    exe.root_module.addImport("pg", pg.module("pg"));
+
+    // Ensure generation runs before build
+    exe.step.dependOn(&gen_cmd.step);
+}
+```
+
+## 📄 Example Schema
+
+`schemas/user.json`:
 
 ```json
 {
@@ -72,129 +233,25 @@ Create JSON files in your schemas directory (e.g., `schemas/user.json`):
       "type": "uuid",
       "nullable": false,
       "default": "gen_random_uuid()",
-      "input_mode": "auto_generated"
+      "input_mode": "auto_generated",
+      "primary_key": true
     },
     {
       "name": "email",
       "type": "text",
       "nullable": false,
-      "input_mode": "required"
+      "input_mode": "required",
+      "unique": true
     },
     {
-      "name": "created_at",
-      "type": "timestamptz",
-      "nullable": false,
-      "default": "now()",
+      "name": "deleted_at",
+      "type": "timestamp",
+      "nullable": true,
       "input_mode": "auto_generated"
-    }
-  ],
-  "indexes": [
-    {
-      "name": "users_email_idx",
-      "columns": ["email"],
-      "unique": true
     }
   ]
 }
 ```
-
-## 🔌 Integration Guide
-
-### 1. Using in `build.zig` (Best Practice)
-
-Automate model generation as part of your build process.
-
-```zig
-const std = @import("std");
-
-pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
-
-    // 1. Define the dependency
-    const model_gen_dep = b.dependency("model_gen", .{
-        .target = target,
-        .optimize = optimize,
-    });
-
-    // 2. Create the generation step
-    const gen_cmd = b.addRunArtifact(model_gen_dep.artifact("zig-model-gen"));
-    gen_cmd.addArg("schemas");      // Input directory
-    gen_cmd.addArg("src/models");   // Output directory
-
-    // 3. Define your executable
-    const exe = b.addExecutable(.{
-        .name = "my-app",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    // 4. Add pg dependency (required by generated models)
-    const pg = b.dependency("pg", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    exe.root_module.addImport("pg", pg.module("pg"));
-
-    // 5. Ensure models are generated BEFORE compilation
-    exe.step.dependOn(&gen_cmd.step);
-
-    b.installArtifact(exe);
-}
-```
-
-### 2. Using with Makefile
-
-If you prefer Makefiles:
-
-```makefile
-.PHONY: generate build
-
-generate:
-	zig-model-gen schemas src/models
-
-build: generate
-	zig build
-```
-
-## 💻 Code Example
-
-Once generated, use the models in your Zig code:
-
-```zig
-const std = @import("std");
-const pg = @import("pg");
-// Import generated model
-const User = @import("models/user.zig").User;
-
-pub fn main() !void {
-    // ... setup pg pool ...
-
-    // Create a new user
-    const user_id = try User.insert(&pool, .{
-        .email = "alice@example.com",
-    });
-
-    // Find by ID
-    if (try User.findById(&pool, user_id)) |user| {
-        std.debug.print("Found user: {s}\n", .{user.email});
-    }
-
-    // Update
-    try User.update(&pool, user_id, .{
-        .email = "alice.new@example.com",
-    });
-}
-```
-
-## 🏗 Architecture
-
-The generator works in 3 steps:
-
-1.  **Scan**: Finds all `.json` files in the input directory.
-2.  **Validate**: Checks schema validity (types, required fields, indexes).
-3.  **Generate**: Creates `.zig` files and bundles a copy of `base.zig` so the output is self-contained.
 
 ## 📄 License
 
