@@ -120,7 +120,7 @@ pub fn main() !void {
     }
 }
 
-/// Copy base.zig from scripts/ to the output directory for self-contained generated models
+/// Copy base.zig, query.zig, and transaction.zig to the output directory
 fn copyBaseModel(allocator: std.mem.Allocator, output_dir: []const u8) !void {
     const base_dest_path = try std.fmt.allocPrint(allocator, "{s}/base.zig", .{output_dir});
     const query_builder_dest_path = try std.fmt.allocPrint(allocator, "{s}/query.zig", .{output_dir});
@@ -129,51 +129,20 @@ fn copyBaseModel(allocator: std.mem.Allocator, output_dir: []const u8) !void {
     defer allocator.free(query_builder_dest_path);
     defer allocator.free(transaction_dest_path);
 
-    // Source is always scripts/base.zig
-    const base_source_path = "src/base.zig";
-    const query_builder_source_path = "src/query.zig";
-    const transaction_source_path = "src/transaction.zig";
-
-    // Read source file
-    const source_file = std.fs.cwd().openFile(base_source_path, .{}) catch |err| {
-        std.debug.print("⚠️  Warning: Could not read scripts/base.zig: {}\n", .{err});
-        std.debug.print("   Generated models will need base.zig to be provided manually.\n", .{});
-        return;
-    };
-    defer source_file.close();
-
-    const query_builder_file = std.fs.cwd().openFile(query_builder_source_path, .{}) catch |err| {
-        std.debug.print("⚠️  Warning: Could not read scripts/query.zig: {}\n", .{err});
-        std.debug.print("   Generated models will need query.zig to be provided manually.\n", .{});
-        return;
-    };
-    defer query_builder_file.close();
-
-    const transaction_file = std.fs.cwd().openFile(transaction_source_path, .{}) catch |err| {
-        std.debug.print("⚠️  Warning: Could not read scripts/transaction.zig: {}\n", .{err});
-        std.debug.print("   Generated models will need transaction.zig to be provided manually.\n", .{});
-        return;
-    };
-    defer transaction_file.close();
-
-    const source_content = try source_file.readToEndAlloc(allocator, 1024 * 1024);
-    defer allocator.free(source_content);
-
-    const query_builder_content = try query_builder_file.readToEndAlloc(allocator, 1024 * 1024);
-    defer allocator.free(query_builder_content);
-
-    const transaction_content = try transaction_file.readToEndAlloc(allocator, 1024 * 1024);
-    defer allocator.free(transaction_content);
+    // Embed source files directly into the executable
+    const base_content = @embedFile("base.zig");
+    const query_content = @embedFile("query.zig");
+    const transaction_content = @embedFile("transaction.zig");
 
     // Write to output directory (always overwrite to ensure latest version)
     try std.fs.cwd().writeFile(.{
         .sub_path = base_dest_path,
-        .data = source_content,
+        .data = base_content,
     });
 
     try std.fs.cwd().writeFile(.{
         .sub_path = query_builder_dest_path,
-        .data = query_builder_content,
+        .data = query_content,
     });
 
     try std.fs.cwd().writeFile(.{
