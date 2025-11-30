@@ -1,51 +1,94 @@
 // Schema definition types for the model generator
 const std = @import("std");
 
+pub const AutoGenerateType = enum {
+    none,
+    uuid,
+    timestamp,
+    increments,
+};
+
 pub const FieldType = enum {
     uuid,
+    uuid_optional,
     text,
     text_optional,
     bool,
+    bool_optional,
     i16,
+    i16_optional,
     i32,
+    i32_optional,
     i64,
     i64_optional,
+    f32,
+    f32_optional,
+    f64,
+    f64_optional,
     timestamp,
     timestamp_optional,
     json,
     json_optional,
+    jsonb,
+    jsonb_optional,
+    binary,
+    binary_optional,
 
     pub fn toZigType(self: FieldType) []const u8 {
         return switch (self) {
             .uuid => "[]const u8",
+            .uuid_optional => "?[]const u8",
             .text => "[]const u8",
             .text_optional => "?[]const u8",
             .bool => "bool",
+            .bool_optional => "?bool",
             .i16 => "i16",
+            .i16_optional => "?i16",
             .i32 => "i32",
+            .i32_optional => "?i32",
             .i64 => "i64",
             .i64_optional => "?i64",
+            .f32 => "f32",
+            .f32_optional => "?f32",
+            .f64 => "f64",
+            .f64_optional => "?f64",
             .timestamp => "i64",
             .timestamp_optional => "?i64",
             .json => "[]const u8",
             .json_optional => "?[]const u8",
+            .jsonb => "[]const u8",
+            .jsonb_optional => "?[]const u8",
+            .binary => "[]const u8",
+            .binary_optional => "?[]const u8",
         };
     }
 
     pub fn toPgType(self: FieldType) []const u8 {
         return switch (self) {
             .uuid => "UUID",
+            .uuid_optional => "UUID",
             .text => "TEXT",
             .text_optional => "TEXT",
             .bool => "BOOLEAN",
+            .bool_optional => "BOOLEAN",
             .i16 => "SMALLINT",
+            .i16_optional => "SMALLINT",
             .i32 => "INT",
+            .i32_optional => "INT",
             .i64 => "BIGINT",
             .i64_optional => "BIGINT",
+            .f32 => "float4",
+            .f32_optional => "float4",
+            .f64 => "numeric",
+            .f64_optional => "numeric",
             .timestamp => "TIMESTAMP",
             .timestamp_optional => "TIMESTAMP",
             .json => "JSON",
             .json_optional => "JSON",
+            .jsonb => "JSONB",
+            .jsonb_optional => "JSONB",
+            .binary => "bytea",
+            .binary_optional => "bytea",
         };
     }
 
@@ -82,6 +125,7 @@ pub const Field = struct {
     // SQL defaults
     default_value: ?[]const u8 = null,
     auto_generated: bool = false,
+    auto_generate_type: AutoGenerateType = .none,
 };
 
 pub const Index = struct {
