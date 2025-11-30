@@ -1,4 +1,4 @@
-# FluentORM
+# FluentORM - re-write in-progress
 
 # Usage
 
