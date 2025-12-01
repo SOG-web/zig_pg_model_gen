@@ -17,7 +17,7 @@ pub fn getAllSchemas(allocator: std.mem.Allocator) ![]TableSchema {
     var result = std.ArrayList(TableSchema){};
     errdefer {
         for (result.items) |*schema| {
-            schema.deinit(allocator);
+            schema.deinit();
         }
         result.deinit(allocator);
     }

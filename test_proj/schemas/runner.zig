@@ -1,6 +1,8 @@
 const std = @import("std");
 const registry = @import("registry.zig");
 const fluentorm = @import("fluentorm");
+const sql_generator = fluentorm.sql_generator;
+const model_generator = fluentorm.model_generator;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -20,6 +22,7 @@ pub fn main() !void {
         const schema_file = try std.fmt.allocPrint(allocator, "{s}.zig", .{schema.name});
         defer allocator.free(schema_file);
 
-        try fluentorm.model_generator.generateModel(allocator, schema, schema_file, output_dir);
+        try sql_generator.writeSchemaToFile(allocator, schema, output_dir);
+        try model_generator.generateModel(allocator, schema, schema_file, output_dir);
     }
 }

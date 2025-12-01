@@ -3,7 +3,7 @@ const std = @import("std");
 const Field = @import("schema.zig").Field;
 const TableSchema = @import("table.zig");
 
-fn generateFieldSQL(allocator: std.mem.Allocator, sql: *std.ArrayList(u8), field: *const Field, is_alter: bool) !void {
+fn generateFieldSQL(allocator: std.mem.Allocator, sql: *std.ArrayList(u8), field: Field, is_alter: bool) !void {
     if (is_alter) {
         try sql.print(allocator, "ALTER COLUMN {s} TYPE {s}", .{ field.name, field.type.toPgType() });
     } else {
@@ -110,7 +110,7 @@ pub fn generateCreateTableSQL(allocator: std.mem.Allocator, table: *const TableS
     return sql.toOwnedSlice(allocator);
 }
 
-pub fn writeSchemaToFile(allocator: std.mem.Allocator, table: *const TableSchema, output_dir: []const u8) !void {
+pub fn writeSchemaToFile(allocator: std.mem.Allocator, table: TableSchema, output_dir: []const u8) !void {
     const sql = try generateCreateTableSQL(allocator, table);
     defer allocator.free(sql);
 
