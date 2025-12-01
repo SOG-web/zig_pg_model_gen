@@ -1,5 +1,10 @@
 const std = @import("std");
 
+const SchemaInfo = struct {
+    name: []const u8, // Table name (e.g., "users")
+    filename: []const u8, // Original filename without .zig (e.g., "01_users")
+};
+
 pub fn generateRegistry(schemas_dir: []const u8, output_file: []const u8) !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -9,7 +14,7 @@ pub fn generateRegistry(schemas_dir: []const u8, output_file: []const u8) !void 
     var dir = try std.fs.cwd().openDir(schemas_dir, .{ .iterate = true });
     defer dir.close();
 
-    var schemas = std.ArrayList([]const u8){};
+    var schemas = std.ArrayList(SchemaInfo){};
     defer schemas.deinit(allocator);
 
     var iterator = dir.iterate();
@@ -17,19 +22,23 @@ pub fn generateRegistry(schemas_dir: []const u8, output_file: []const u8) !void 
         if (entry.kind != .file) continue;
         if (!std.mem.endsWith(u8, entry.name, ".zig")) continue;
         if (std.mem.eql(u8, entry.name, "registry.zig")) continue;
+        if (std.mem.eql(u8, entry.name, "runner.zig")) continue;
 
-        // TODO: consider naming - e.g 01_schema.zig, 02_schema.zig, etc.
+        // Filename without .zig extension (e.g., "01_users")
+        const filename = try allocator.dupe(u8, entry.name[0 .. entry.name.len - 4]);
+        // Table name: strip XX_ prefix (e.g., "01_users" -> "users")
         const name = try allocator.dupe(u8, entry.name[3 .. entry.name.len - 4]);
-        try schemas.append(
-            allocator,
-            name,
-        );
+
+        try schemas.append(allocator, .{
+            .name = name,
+            .filename = filename,
+        });
     }
 
-    // TODO: sort by number - e.g 01_schema.zig, 02_schema.zig, etc.
-    std.mem.sort([]const u8, schemas.items, {}, struct {
-        fn lessThan(_: void, a: []const u8, b: []const u8) bool {
-            return std.mem.order(u8, a, b) == .lt;
+    // Sort by filename to maintain order (01_, 02_, etc.)
+    std.mem.sort(SchemaInfo, schemas.items, {}, struct {
+        fn lessThan(_: void, a: SchemaInfo, b: SchemaInfo) bool {
+            return std.mem.order(u8, a.filename, b.filename) == .lt;
         }
     }.lessThan);
 
@@ -47,15 +56,15 @@ pub fn generateRegistry(schemas_dir: []const u8, output_file: []const u8) !void 
     try registry.appendSlice(allocator, "const SchemaBuilder = @import(\"fluentorm\").SchemaBuilder;\n\n");
 
     // Import all schema files
-    for (schemas.items) |schema_name| {
-        try registry.writer(allocator).print("const {s}_schema = @import(\"{s}.zig\");\n", .{ schema_name, schema_name });
+    for (schemas.items) |schema| {
+        try registry.writer(allocator).print("const {s}_schema = @import(\"{s}.zig\");\n", .{ schema.name, schema.filename });
     }
 
-    try registry.appendSlice(allocator, "pub const schemas = [_]SchemaBuilder{\n");
-    for (schemas.items) |schema_name| {
-        try registry.writer(allocator).print("    .{{ .name = \"{s}\", .builder_fn = {s}_schema.build }},\n", .{ schema_name, schema_name });
+    try registry.appendSlice(allocator, "\npub const schemas = [_]SchemaBuilder{{\n");
+    for (schemas.items) |schema| {
+        try registry.writer(allocator).print("    .{{ .name = \"{s}\", .builder_fn = {s}_schema.build }},\n", .{ schema.name, schema.name });
     }
-    try registry.appendSlice(allocator, "};\n\n");
+    try registry.appendSlice(allocator, "}};\n\n");
 
     try registry.appendSlice(allocator,
         \\pub fn getAllSchemas(allocator: std.mem.Allocator) ![]TableSchema {
@@ -87,7 +96,8 @@ pub fn generateRegistry(schemas_dir: []const u8, output_file: []const u8) !void 
     try file.writeAll(final);
 
     std.debug.print("Generated registry with {d} schemas at {s}\n", .{ schemas.items.len, output_file });
-    for (schemas.items) |name| {
-        allocator.free(name);
+    for (schemas.items) |schema| {
+        allocator.free(schema.name);
+        allocator.free(schema.filename);
     }
 }
