@@ -46,12 +46,27 @@ pub fn build(b: *std.Build) void {
     }
 
     // Generate step - uses the fluentzig-gen CLI from the dependency
-    const gen_step = b.step("generate", "Generate models from schemas using fluentzig-gen CLI");
+    // Step 1: Generate registry.zig and runner.zig
+    const gen_step = b.step("generate", "Generate registry and runner from schemas");
     const gen_exe = fluentorm_dep.artifact("fluentzig-gen");
     const gen_cmd = b.addRunArtifact(gen_exe);
-    // Pass schemas directory and output directory as arguments
     gen_cmd.addArgs(&.{ "schemas", "src/models/generated" });
     gen_step.dependOn(&gen_cmd.step);
+
+    // Step 2: Run the generated runner to create model files
+    const runner_exe = b.addExecutable(.{
+        .name = "model-runner",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("schemas/runner.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "fluentorm", .module = fluentorm },
+            },
+        }),
+    });
+    const gen_models_step = b.step("generate-models", "Generate model files from schemas");
+    gen_models_step.dependOn(&b.addRunArtifact(runner_exe).step);
 
     // Test step
     const mod_tests = b.addTest(.{

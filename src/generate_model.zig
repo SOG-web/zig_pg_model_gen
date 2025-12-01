@@ -122,6 +122,9 @@ fn copyBaseModel(allocator: std.mem.Allocator, output_dir: []const u8) !void {
     const query_content = @embedFile("query.zig");
     const transaction_content = @embedFile("transaction.zig");
 
+    // Ensure output directory exists
+    try std.fs.cwd().createDirectory(output_dir, .{});
+
     // Write to output directory (always overwrite to ensure latest version)
     try std.fs.cwd().writeFile(.{
         .sub_path = base_dest_path,

@@ -5,9 +5,11 @@ const std = @import("std");
 const TableSchema = @import("fluentorm").TableSchema;
 const SchemaBuilder = @import("fluentorm").SchemaBuilder;
 
+const ner_schema = @import("ner.zig");
 const posts_schema = @import("posts.zig");
 const users_schema = @import("users.zig");
 pub const schemas = [_]SchemaBuilder{
+    .{ .name = "ner", .builder_fn = ner_schema.build },
     .{ .name = "posts", .builder_fn = posts_schema.build },
     .{ .name = "users", .builder_fn = users_schema.build },
 };
