@@ -18,7 +18,8 @@ pub fn generateRegistry(schemas_dir: []const u8, output_file: []const u8) !void 
         if (!std.mem.endsWith(u8, entry.name, ".zig")) continue;
         if (std.mem.eql(u8, entry.name, "registry.zig")) continue;
 
-        const name = try allocator.dupe(u8, entry.name[0 .. entry.name.len - 4]);
+        // TODO: consider naming - e.g 01_schema.zig, 02_schema.zig, etc.
+        const name = try allocator.dupe(u8, entry.name[3 .. entry.name.len - 4]);
         try schemas.append(
             allocator,
             name,
@@ -47,12 +48,12 @@ pub fn generateRegistry(schemas_dir: []const u8, output_file: []const u8) !void 
 
     // Import all schema files
     for (schemas.items) |schema_name| {
-        try registry.print(allocator, "const {s}_schema = @import(\"{s}.zig\");\n", .{ schema_name, schema_name });
+        try registry.writer(allocator).print("const {s}_schema = @import(\"{s}.zig\");\n", .{ schema_name, schema_name });
     }
 
     try registry.appendSlice(allocator, "pub const schemas = [_]SchemaBuilder{\n");
     for (schemas.items) |schema_name| {
-        try registry.print(allocator, "    .{{ .name = \"{s}\", .builder_fn = {s}_schema.build }},\n", .{ schema_name, schema_name });
+        try registry.writer(allocator).print("    .{{ .name = \"{s}\", .builder_fn = {s}_schema.build }},\n", .{ schema_name, schema_name });
     }
     try registry.appendSlice(allocator, "};\n\n");
 

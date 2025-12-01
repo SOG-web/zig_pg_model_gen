@@ -12,50 +12,6 @@ pub fn BaseModel(comptime T: type) type {
         @compileError("Struct must have a tableName field");
     }
     return struct {
-        /// Creates the table for this model
-        pub fn createTable(db: *pg.Pool) !void {
-            if (!@hasDecl(T, "createTableSQL")) {
-                @compileError("Model must implement 'createTableSQL() []const u8'");
-            }
-            const sql = T.createTableSQL();
-            _ = try db.exec(sql, .{});
-        }
-
-        /// Drops the table for this model
-        pub fn dropTable(db: *pg.Pool) !void {
-            if (!@hasDecl(T, "tableName")) {
-                @compileError("Model must implement 'tableName() []const u8'");
-            }
-            // Use arena for temporary SQL string
-            var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-            defer arena.deinit();
-            const temp_allocator = arena.allocator();
-
-            const table_name = T.tableName();
-            const sql = try std.fmt.allocPrint(temp_allocator, "DROP TABLE IF EXISTS {s}", .{table_name});
-            _ = try db.exec(sql, .{});
-        }
-
-        /// Creates all indexes for this model
-        pub fn createIndexes(db: *pg.Pool) !void {
-            if (@hasDecl(T, "createIndexSQL")) {
-                const indexes = T.createIndexSQL();
-                for (indexes) |index_sql| {
-                    _ = try db.exec(index_sql, .{});
-                }
-            }
-        }
-
-        /// Drops all indexes for this model
-        pub fn dropIndexes(db: *pg.Pool) !void {
-            if (@hasDecl(T, "dropIndexSQL")) {
-                const indexes = T.dropIndexSQL();
-                for (indexes) |index_sql| {
-                    _ = try db.exec(index_sql, .{});
-                }
-            }
-        }
-
         /// Truncates the table (removes all data but keeps structure)
         pub fn truncate(db: *pg.Pool) !void {
             if (!@hasDecl(T, "tableName")) {
