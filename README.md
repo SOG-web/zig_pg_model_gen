@@ -24,7 +24,7 @@ A schema-first, type-safe ORM for Zig with PostgreSQL support. Define your datab
 ### 1. Add FluentORM to your project
 
 ```bash
-zig fetch --save git+https://github.com/SOG-web/fluentorm#main
+zig fetch --save git+https://github.com/SOG-web/fluentorm.zig#main
 ```
 
 This adds FluentORM to your `build.zig.zon`:
@@ -32,7 +32,7 @@ This adds FluentORM to your `build.zig.zon`:
 ```zig
 .dependencies = .{
     .fluentorm = .{
-        .url = "git+https://github.com/SOG-web/fluentorm#main",
+        .url = "git+https://github.com/SOG-web/fluentorm.zig#main",
         .hash = "<hash>",
     },
 },
