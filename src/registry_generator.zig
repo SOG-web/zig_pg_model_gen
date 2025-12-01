@@ -81,10 +81,6 @@ pub fn generateRegistry(schemas_dir: []const u8, output_file: []const u8) !void 
         \\
     );
 
-    try registry.appendSlice(allocator,
-        \\n
-    );
-
     const final = try registry.toOwnedSlice(allocator);
     defer allocator.free(final);
 
