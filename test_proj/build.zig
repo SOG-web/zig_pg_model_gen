@@ -50,7 +50,7 @@ pub fn build(b: *std.Build) void {
     const gen_step = b.step("generate", "Generate registry and runner from schemas");
     const gen_exe = fluentorm_dep.artifact("fluentzig-gen");
     const gen_cmd = b.addRunArtifact(gen_exe);
-    gen_cmd.addArgs(&.{ "schemas", "src/models/generated" });
+    gen_cmd.addArgs(&.{ "schemas", "src/models/generated", "migrations" });
     gen_step.dependOn(&gen_cmd.step);
 
     // Step 2: Run the generated runner to create model files

@@ -16,13 +16,18 @@ pub fn main() !void {
     }
 
     const output_dir = "src/models/generated";
+    const sql_output_dir = "migrations";
+
+    try std.fs.cwd().makePath(output_dir);
+    try std.fs.cwd().makePath(sql_output_dir);
+
 
     for (schemas) |schema| {
         // Use schema name as the source file name for comments
         const schema_file = try std.fmt.allocPrint(allocator, "{s}.zig", .{schema.name});
         defer allocator.free(schema_file);
 
-        try sql_generator.writeSchemaToFile(allocator, schema, output_dir);
+        try sql_generator.writeSchemaToFile(allocator, schema, sql_output_dir);
         try model_generator.generateModel(allocator, schema, schema_file, output_dir);
     }
 }

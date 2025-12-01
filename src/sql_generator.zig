@@ -10,10 +10,6 @@ fn generateFieldSQL(allocator: std.mem.Allocator, sql: *std.ArrayList(u8), field
         try sql.print(allocator, "  {s} {s}", .{ field.name, field.type.toPgType() });
     }
 
-    if (is_alter) {
-        try sql.appendSlice(allocator, " ");
-    }
-
     if (field.primary_key) {
         try sql.appendSlice(allocator, " PRIMARY KEY");
     }
@@ -23,16 +19,13 @@ fn generateFieldSQL(allocator: std.mem.Allocator, sql: *std.ArrayList(u8), field
     if (field.not_null and !field.primary_key) {
         try sql.appendSlice(allocator, " NOT NULL");
     }
-    if (field.default_value) |default| {
-        try sql.print(allocator, " DEFAULT {s}", .{default});
-    }
     if (field.auto_generated and field.auto_generate_type == .increments) {
         try sql.appendSlice(allocator, " GENERATED ALWAYS AS IDENTITY");
-    }
-    if (field.auto_generated and field.auto_generate_type == .uuid) {
+    } else if (field.default_value) |default| {
+        try sql.print(allocator, " DEFAULT {s}", .{default});
+    } else if (field.auto_generated and field.auto_generate_type == .uuid) {
         try sql.appendSlice(allocator, " DEFAULT gen_random_uuid()");
-    }
-    if (field.auto_generated and field.auto_generate_type == .timestamp) {
+    } else if (field.auto_generated and field.auto_generate_type == .timestamp) {
         try sql.appendSlice(allocator, " DEFAULT CURRENT_TIMESTAMP");
     }
 }
@@ -91,6 +84,8 @@ pub fn generateCreateTableSQL(allocator: std.mem.Allocator, table: TableSchema) 
                 try sql.appendSlice(allocator, ", ");
             }
         }
+
+        try sql.appendSlice(allocator, ");\n");
     }
 
     // Add drop index
@@ -100,12 +95,10 @@ pub fn generateCreateTableSQL(allocator: std.mem.Allocator, table: TableSchema) 
 
     // Add alter table
     for (table.alters.items) |alter| {
-        try sql.print(allocator, "ALTER TABLE {s} {s};\n", .{ table.name, alter });
-        try sql.appendSlice(allocator, "\n");
+        try sql.print(allocator, "ALTER TABLE {s} ", .{table.name});
         try generateFieldSQL(allocator, &sql, alter, true);
+        try sql.appendSlice(allocator, ";\n");
     }
-
-    try sql.appendSlice(allocator, ";\n");
 
     return sql.toOwnedSlice(allocator);
 }

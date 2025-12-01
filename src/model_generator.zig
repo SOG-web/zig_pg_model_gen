@@ -142,21 +142,12 @@ fn relationshipToFieldName(allocator: std.mem.Allocator, rel: Relationship) ![]c
 fn getFinalFields(allocator: std.mem.Allocator, schema: TableSchema) ![]Field {
     var fields = std.ArrayList(Field){};
     defer fields.deinit(allocator);
-    try fields.appendSlice(allocator, .fields.items);
+    try fields.appendSlice(allocator, schema.fields.items);
 
     for (schema.alters.items) |alter| {
         for (fields.items) |*f| {
             if (std.mem.eql(u8, f.name, alter.name)) {
-                if (alter.type) |t| f.type = t;
-                if (alter.primary_key) |pk| f.primary_key = pk;
-                if (alter.unique) |u| f.unique = u;
-                if (alter.not_null) |nn| f.not_null = nn;
-                if (alter.create_input) |ci| f.create_input = ci;
-                if (alter.update_input) |ui| f.update_input = ui;
-                if (alter.redacted) |r| f.redacted = r;
-                if (alter.default_value) |dv| f.default_value = dv;
-                if (alter.auto_generated) |ag| f.auto_generated = ag;
-                if (alter.auto_generate_type) |agt| f.auto_generate_type = agt;
+                f.* = alter;
                 break;
             }
         }
@@ -264,17 +255,16 @@ fn generateImports(writer: anytype, schema: TableSchema, allocator: std.mem.Allo
             if (!seen_tables.contains(rel.references_table)) {
                 try seen_tables.put(rel.references_table, {});
 
-                const struct_name = try tableToPascalCase(allocator, rel.references_table);
+                const struct_name = try toPascalCaseNonSingular(allocator, rel.references_table);
                 defer allocator.free(struct_name);
 
                 // Convert struct name to snake_case for filename
                 const file_name = try toLowerSnakeCase(allocator, struct_name);
                 defer allocator.free(file_name);
 
-                try writer.print("const {s} = @import(\"{s}.zig\").{s};\n", .{
-                    struct_name,
+                try writer.print("const {s} = @import(\"{s}.zig\");\n", .{
+                    singularize(struct_name),
                     file_name,
-                    struct_name,
                 });
             }
         }
@@ -291,6 +281,13 @@ fn generateStructDefinition(writer: anytype, schema: TableSchema, fields: []cons
     for (fields) |field| {
         try writer.print("{s}: {s},\n", .{ field.name, field.type.toZigType() });
     }
+
+    // generate field enum
+    try writer.writeAll("    pub const FieldEnum = enum {\n");
+    for (fields) |field| {
+        try writer.print("        {s},\n", .{field.name});
+    }
+    try writer.writeAll("    };\n");
 
     try writer.writeAll("\n\n");
 }
@@ -632,8 +629,8 @@ fn generateCRUDWrappers(writer: anytype, schema: TableSchema) !void {
         \\
     );
 
-    try writer.print("    pub fn query() QueryBuilder({s}, UpdateInput) {{\n", .{schema.name});
-    try writer.print("        return QueryBuilder({s}, UpdateInput).init();\n", .{schema.name});
+    try writer.print("    pub fn query() QueryBuilder({s}, UpdateInput, FieldEnum) {{\n", .{schema.name});
+    try writer.print("        return QueryBuilder({s}, UpdateInput, FieldEnum).init();\n", .{schema.name});
     try writer.writeAll("    }\n\n");
 }
 
@@ -732,7 +729,7 @@ fn generateJsonResponseHelpers(writer: anytype, schema: TableSchema, fields: []c
 }
 
 fn generateRelationshipMethods(writer: anytype, schema: TableSchema, allocator: std.mem.Allocator) !void {
-    if (schema.relationships.len == 0) return;
+    if (schema.relationships.items.len == 0) return;
 
     try writer.writeAll("    // Relationship methods\n");
 

@@ -2,40 +2,8 @@ const std = @import("std");
 
 const pg = @import("pg");
 
-/// This has no zls autocomplete support yet - see https://github.com/zigtools/zls/issues/2515
-/// Example:
-/// ```zig
-/// const MyModel = struct {
-///     id: u64,
-///     name: []const u8,
-///
-///    pub fn tableName() []const u8 {
-///        return "my_model";
-///    }
-/// };
-/// const Field = BuildFieldEnum(MyModel);
-/// ```
-fn BuildFieldEnum(comptime T: type) type {
-    const fields = @typeInfo(T).@"struct".fields;
-    var enum_fields: [fields.len]std.builtin.Type.EnumField = undefined;
-
-    inline for (fields, 0..) |field, i| {
-        enum_fields[i] = .{
-            .name = field.name,
-            .value = i,
-        };
-    }
-
-    return @Type(.{ .@"enum" = .{
-        .decls = &.{},
-        .tag_type = u32,
-        .fields = &enum_fields,
-        .is_exhaustive = true,
-    } });
-}
-
 /// Query builder for BaseModel operations
-pub fn QueryBuilder(comptime T: type, comptime K: type) type {
+pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type {
     if (!@hasDecl(T, "tableName")) {
         @compileError("Struct must have a tableName field");
     }
@@ -52,8 +20,7 @@ pub fn QueryBuilder(comptime T: type, comptime K: type) type {
 
         /// Enum of field names for the model.
         ///
-        /// This has no zls autocomplete support yet - see https://github.com/zigtools/zls/issues/2515
-        pub const Field = BuildFieldEnum(T);
+        pub const Field = FE;
 
         pub const Operator = enum {
             eq,
@@ -102,7 +69,6 @@ pub fn QueryBuilder(comptime T: type, comptime K: type) type {
         pub const WhereClause = struct {
             /// Enum of field names for the model.
             ///
-            /// This has no zls autocomplete support yet - see https://github.com/zigtools/zls/issues/2515
             field: Field,
             operator: Operator,
             value: ?[]const u8 = null,
@@ -126,7 +92,6 @@ pub fn QueryBuilder(comptime T: type, comptime K: type) type {
 
         /// Enum of field names for the model.
         ///
-        /// This has no zls autocomplete support yet - see https://github.com/zigtools/zls/issues/2515
         pub const SelectField = []const Field;
 
         pub fn init() Self {

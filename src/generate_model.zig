@@ -19,9 +19,9 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    if (args.len < 2) {
-        std.debug.print("Usage: {s} <schemas_directory> [output_directory]\n", .{args[0]});
-        std.debug.print("Example: {s} schemas src/models/generated\n", .{args[0]});
+    if (args.len < 3) {
+        std.debug.print("Usage: {s} <schemas_directory> <output_directory> <sql_output_directory>\n", .{args[0]});
+        std.debug.print("Example: {s} schemas src/models/generated migrations\n", .{args[0]});
         std.debug.print("\nThis generates registry.zig and runner.zig in the schemas directory.\n", .{});
         std.debug.print("Then add a build step in your build.zig to run the runner.\n", .{});
         return error.MissingArgument;
@@ -29,6 +29,7 @@ pub fn main() !void {
 
     const schemas_dir = args[1];
     const output_dir = if (args.len >= 3) args[2] else "src/models/generated";
+    const sql_output_dir = if (args.len >= 4) args[3] else "migrations";
 
     std.debug.print("Scanning schemas directory: {s}\n", .{schemas_dir});
     std.debug.print("Output directory for models: {s}\n\n", .{output_dir});
@@ -44,7 +45,12 @@ pub fn main() !void {
     const runner_path = try std.fmt.allocPrint(allocator, "{s}/runner.zig", .{schemas_dir});
     defer allocator.free(runner_path);
 
-    try generateRunner(allocator, runner_path, output_dir);
+    try generateRunner(
+        allocator,
+        runner_path,
+        output_dir,
+        sql_output_dir,
+    );
     std.debug.print("✅ Generated runner at {s}\n", .{runner_path});
 
     // Copy base model files to output directory
@@ -71,7 +77,12 @@ pub fn main() !void {
     std.debug.print("   Then run: zig build generate-models\n", .{});
 }
 
-fn generateRunner(allocator: std.mem.Allocator, output_path: []const u8, output_dir: []const u8) !void {
+fn generateRunner(
+    allocator: std.mem.Allocator,
+    output_path: []const u8,
+    output_dir: []const u8,
+    sql_output_dir: []const u8,
+) !void {
     const file = try std.fs.cwd().createFile(output_path, .{});
     defer file.close();
 
@@ -94,18 +105,23 @@ fn generateRunner(allocator: std.mem.Allocator, output_path: []const u8, output_
         \\    }}
         \\
         \\    const output_dir = "{s}";
+        \\    const sql_output_dir = "{s}";
+        \\
+        \\    try std.fs.cwd().makePath(output_dir);
+        \\    try std.fs.cwd().makePath(sql_output_dir);
+        \\
         \\
         \\    for (schemas) |schema| {{
         \\        // Use schema name as the source file name for comments
         \\        const schema_file = try std.fmt.allocPrint(allocator, "{{s}}.zig", .{{schema.name}});
         \\        defer allocator.free(schema_file);
         \\
-        \\        try sql_generator.writeSchemaToFile(allocator, schema, output_dir);
+        \\        try sql_generator.writeSchemaToFile(allocator, schema, sql_output_dir);
         \\        try model_generator.generateModel(allocator, schema, schema_file, output_dir);
         \\    }}
         \\}}
         \\
-    , .{output_dir});
+    , .{ output_dir, sql_output_dir });
     defer allocator.free(content);
 
     try file.writeAll(content);

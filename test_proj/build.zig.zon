@@ -33,8 +33,7 @@
     // internet connectivity.
     .dependencies = .{
         .fluentorm = .{
-            .url = "git+https://github.com/SOG-web/zig_pg_model_gen/?ref=fluentzig#3e372806d10e34d0c17d23fbf43c4d170829602d",
-            .hash = "fluentorm-0.0.0-rdWsyEGqAQBgj_QZtGSOUCJYQxT1mvwJXNaU4Hgh4-Z8",
+            .path = "../",
         },
     },
     .paths = .{

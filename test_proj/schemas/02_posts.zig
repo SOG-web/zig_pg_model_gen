@@ -69,6 +69,13 @@ pub fn build(t: *TableSchema) void {
         .update_input = false,
     });
 
+    t.string(.{
+        .name = "altered",
+        .not_null = false,
+        .create_input = .excluded,
+        .update_input = false,
+    });
+
     // Relationship: post belongs to user (many-to-one)
     t.foreign(.{
         .name = "post_author",
@@ -86,5 +93,12 @@ pub fn build(t: *TableSchema) void {
             .columns = &.{ "user_id", "created_at" },
             .unique = false,
         },
+    });
+
+    t.alterField(.{
+        .name = "altered",
+        .type = .f64,
+        .create_input = .optional,
+        .update_input = true,
     });
 }
