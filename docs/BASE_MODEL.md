@@ -1,102 +1,300 @@
-# Base Model Documentation
+# Base Model
 
-The `BaseModel` provides the core CRUD and DDL operations for all generated models.
+The base model provides common CRUD (Create, Read, Update, Delete) and DDL operations for all generated models.
 
-## Generated Methods
+## Overview
 
-Every generated model struct (e.g., `User`) has these static methods available.
+Every generated model automatically includes methods from the base model, providing a consistent interface for database operations. Models are generated from your schema definitions using the TableSchema builder API.
 
-### CRUD Operations
+## Generated Structure
 
-#### `findById(db: *pg.Pool, allocator: Allocator, id: []const u8) !?T`
+When you run `zig build generate-models`, FluentORM generates:
 
-Finds a single record by its primary key (UUID).
+- **Model files** (e.g., `users.zig`, `posts.zig`) with CRUD operations
+- **base.zig** - Common utilities and CRUD implementations
+- **query.zig** - Query builder for type-safe filtering
+- **transaction.zig** - Transaction support
+- **root.zig** - Barrel export for easy imports
 
-- Returns `null` if not found.
-- Respects `deleted_at` if present (returns `null` for soft-deleted records).
+## CRUD Operations
 
-#### `findAll(db: *pg.Pool, allocator: Allocator, include_deleted: bool) ![]T`
+### Create (Insert)
 
-Returns all records in the table.
+Insert a new record and get back the primary key:
 
-- `include_deleted`: If `true`, includes soft-deleted records.
+```zig
+const user_id = try User.insert(&pool, allocator, .{
+    .email = "alice@example.com",
+    .name = "Alice",
+    .password_hash = "hashed_password",
+});
+defer allocator.free(user_id);
+```
 
-#### `insert(db: *pg.Pool, allocator: Allocator, data: CreateInput) ![]const u8`
+**Note**: Fields marked with `.create_input = .excluded` (like auto-generated UUIDs and timestamps) are automatically excluded from the insert input struct.
 
-Inserts a new record.
+#### Insert and Return Full Object
 
-- Returns the generated `id`.
-- `CreateInput` is a generated struct containing all required and optional fields.
+```zig
+const user = try User.insertAndReturn(&pool, allocator, .{
+    .email = "alice@example.com",
+    .name = "Alice",
+    .password_hash = "hashed_password",
+});
+defer allocator.free(user);
+```
 
-#### `insertAndReturn(db: *pg.Pool, allocator: Allocator, data: CreateInput) !T`
+### Read (Query)
 
-Inserts a record and returns the full model object.
+#### Find by ID
 
-#### `update(db: *pg.Pool, id: []const u8, data: UpdateInput) !void`
+```zig
+if (try User.findById(&pool, allocator, user_id)) |user| {
+    defer allocator.free(user);
+    std.debug.print("Found user: {s}\n", .{user.name});
+}
+```
 
-Updates an existing record.
+Returns `null` if not found or if the record is soft-deleted.
 
-- `UpdateInput` contains optional fields for all updatable columns.
+#### Query with conditions
 
-#### `updateAndReturn(db: *pg.Pool, allocator: Allocator, id: []const u8, data: UpdateInput) !T`
+```zig
+var query = User.query();
+defer query.deinit();
 
-Updates a record and returns the full updated model object.
+const users = try query
+    .where(.{ .field = .email, .operator = .eq, .value = "$1" })
+    .fetch(&pool, allocator, .{"alice@example.com"});
+defer allocator.free(users);
+```
 
-#### `upsert(db: *pg.Pool, allocator: Allocator, data: CreateInput) ![]const u8`
+#### Fetch all records
 
-Inserts a record, or updates it if a unique constraint violation occurs.
+```zig
+const all_users = try User.findAll(&pool, allocator, false);
+defer allocator.free(all_users);
+```
 
-- Requires a unique index to be defined in the schema.
-- Returns the `id`.
+To include soft-deleted records, pass `true`:
 
-#### `upsertAndReturn(db: *pg.Pool, allocator: Allocator, data: CreateInput) !T`
+```zig
+const all_including_deleted = try User.findAll(&pool, allocator, true);
+defer allocator.free(all_including_deleted);
+```
 
-Upserts and returns the full model object.
+### Update
 
-### Deletion
+Update specific fields for a record:
 
-#### `softDelete(db: *pg.Pool, id: []const u8) !void`
+```zig
+try User.update(&pool, user_id, .{
+    .name = "Alice Smith",
+    .email = "alice.smith@example.com",
+});
+```
 
-Sets the `deleted_at` timestamp to the current time.
+**Note**: Fields marked with `.update_input = false` (like `created_at`, auto-generated IDs) are excluded from the update input struct.
 
-- **Requirement**: Schema must have a `deleted_at` field.
+#### Update and Return
 
-#### `hardDelete(db: *pg.Pool, id: []const u8) !void`
+```zig
+const updated_user = try User.updateAndReturn(&pool, allocator, user_id, .{
+    .name = "Alice Smith",
+});
+defer allocator.free(updated_user);
+```
 
-Permanently removes the record from the database.
+### Upsert
 
-### DDL Operations
+Insert a record, or update if a unique constraint violation occurs:
 
-#### `createTable(db: *pg.Pool) !void`
+```zig
+const user_id = try User.upsert(&pool, allocator, .{
+    .email = "alice@example.com",
+    .name = "Alice",
+    .password_hash = "hashed_password",
+});
+defer allocator.free(user_id);
+```
 
-Creates the table if it does not exist.
+**Requirement**: Your schema must have at least one unique constraint (besides the primary key).
 
-#### `createIndexes(db: *pg.Pool) !void`
+#### Upsert and Return
 
-Creates all indexes defined in the schema.
+```zig
+const user = try User.upsertAndReturn(&pool, allocator, .{
+    .email = "alice@example.com",
+    .name = "Alice",
+    .password_hash = "hashed_password",
+});
+defer allocator.free(user);
+```
 
-#### `dropTable(db: *pg.Pool) !void`
+### Delete
 
-Drops the table if it exists.
+#### Soft Delete
 
-#### `truncate(db: *pg.Pool) !void`
+If your schema includes a `deleted_at` field, you can use soft deletes:
 
-Removes all data from the table but keeps the structure.
+```zig
+try User.softDelete(&pool, user_id);
+```
 
-#### `tableExists(db: *pg.Pool) !bool`
+Soft-deleted records are automatically excluded from queries by default. Use `.withDeleted()` on queries to include them.
 
-Checks if the table exists in the database.
+#### Hard Delete
 
-### Utilities
+Permanently removes the record:
 
-#### `count(db: *pg.Pool, include_deleted: bool) !i64`
+```zig
+try User.hardDelete(&pool, user_id);
+```
 
-Returns the total number of records.
+**Warning**: This is irreversible and bypasses any soft-delete logic.
 
-#### `fromRow(row: anytype, allocator: Allocator) !T`
+## DDL Operations
 
-Helper to convert a `pg.zig` row result into a model instance.
+Base models provide Data Definition Language (DDL) operations for schema management.
 
-#### `tableName() []const u8`
+### Create Table
 
-Returns the SQL table name.
+Execute the generated `CREATE TABLE` SQL statement:
+
+```zig
+try User.createTable(&pool);
+```
+
+This creates the table with all fields, constraints, and indexes defined in your schema.
+
+### Create Indexes
+
+Create all indexes defined in the schema:
+
+```zig
+try User.createIndexes(&pool);
+```
+
+### Drop Table
+
+Remove the table from the database:
+
+```zig
+try User.dropTable(&pool);
+```
+
+**Warning**: This is a destructive operation and will delete all data.
+
+### Truncate Table
+
+Remove all data but keep the table structure:
+
+```zig
+try User.truncate(&pool);
+```
+
+### Check Table Existence
+
+```zig
+const exists = try User.tableExists(&pool);
+if (exists) {
+    std.debug.print("Table exists\n", .{});
+}
+```
+
+## Utility Operations
+
+### Count Records
+
+```zig
+const total_users = try User.count(&pool, false);
+std.debug.print("Total users: {d}\n", .{total_users});
+
+// Include soft-deleted
+const total_including_deleted = try User.count(&pool, true);
+```
+
+### Convert Row to Model
+
+Helper to convert a `pg.zig` row result into a model instance:
+
+```zig
+const user = try User.fromRow(row, allocator);
+```
+
+### Get Table Name
+
+```zig
+const table_name = User.tableName();
+std.debug.print("Table: {s}\n", .{table_name});
+```
+
+## JSON Response Helpers
+
+Generated models include JSON-safe response types that convert UUIDs from byte arrays to strings:
+
+```zig
+const user = try User.findById(&pool, allocator, user_id);
+defer allocator.free(user);
+
+const json_response = try user.?.toResponse(allocator);
+defer json_response.deinit(allocator);
+
+// Serialize to JSON
+try std.json.stringify(json_response, .{}, writer);
+```
+
+Fields marked with `.redacted = true` (like `password_hash`) are automatically excluded from JSON responses.
+
+## Field Access
+
+All model fields are accessible as struct members with proper Zig types:
+
+```zig
+std.debug.print("User: {s} ({s})\n", .{ user.name, user.email });
+std.debug.print("Created at: {d}\n", .{user.created_at});
+std.debug.print("Active: {}\n", .{user.is_active});
+```
+
+## Relationship Methods
+
+If you've defined relationships in your schema using `t.foreign()`, the generator creates typed methods for fetching related records:
+
+```zig
+// One-to-many relationship (user has many posts)
+const user_posts = try user.fetchPostAuthor(&pool, allocator);
+defer allocator.free(user_posts);
+
+// Many-to-one relationship (post belongs to user)
+if (try post.fetchPostAuthor(&pool, allocator)) |author| {
+    defer allocator.free(author);
+    std.debug.print("Author: {s}\n", .{author.name});
+}
+```
+
+See [RELATIONSHIPS.md](RELATIONSHIPS.md) for more details on defining and querying relationships.
+
+## Type Safety
+
+FluentORM generates compile-time type-safe code:
+
+- Field names are enum values (autocompletion support)
+- PostgreSQL types map to appropriate Zig types
+- Optional fields use Zig optionals (`?T`)
+- Input structs only include allowed fields based on schema configuration
+
+## Error Handling
+
+All database operations return errors that should be handled:
+
+```zig
+const user = User.findById(&pool, allocator, user_id) catch |err| {
+    std.debug.print("Database error: {}\n", .{err});
+    return err;
+};
+```
+
+Common errors include:
+- `error.QueryFailed` - SQL execution failed
+- `error.OutOfMemory` - Allocation failed
+- `error.ConnectionFailed` - Database connection issue
