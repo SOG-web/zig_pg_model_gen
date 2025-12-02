@@ -29,6 +29,12 @@ pub fn build(t: *TableSchema) void {
         .name = "name",
     });
 
+    // User's bio - optional
+    t.string(.{
+        .name = "bid",
+        .not_null = false,
+    });
+
     // Password hash - required, redacted from JSON responses
     t.string(.{
         .name = "password_hash",

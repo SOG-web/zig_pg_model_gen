@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "created_at": 1764673637,
+  "created_at": 1764674112,
   "tables": [
     {
       "name": "users",
@@ -31,6 +31,16 @@
           "primary_key": false,
           "unique": false,
           "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "bid",
+          "type": "text_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
           "default_value": null,
           "auto_generated": false,
           "auto_generate_type": "none"

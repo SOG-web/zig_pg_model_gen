@@ -19,6 +19,7 @@ const Users = @This();
 id: []const u8,
 email: []const u8,
 name: []const u8,
+bid: ?[]const u8,
 password_hash: []const u8,
 is_active: bool,
 created_at: i64,
@@ -30,6 +31,7 @@ bio: ?[]const u8,
         id,
         email,
         name,
+        bid,
         password_hash,
         is_active,
         created_at,
@@ -44,6 +46,7 @@ bio: ?[]const u8,
     pub const CreateInput = struct {
         email: []const u8,
         name: []const u8,
+        bid: ?[]const u8,
         password_hash: []const u8,
         is_active: ?bool = null,
         phone: ?[]const u8 = null,
@@ -54,6 +57,7 @@ bio: ?[]const u8,
     pub const UpdateInput = struct {
         email: ?[]const u8 = null,
         name: ?[]const u8 = null,
+        bid: ?[]const u8 = null,
         password_hash: ?[]const u8 = null,
         is_active: ?bool = null,
         updated_at: ?i64 = null,
@@ -69,8 +73,8 @@ bio: ?[]const u8,
     pub fn insertSQL() []const u8 {
         return
             \\INSERT INTO users (
-            \\    email, name, password_hash, is_active, phone, bio
-            \\) VALUES ($1, $2, $3, COALESCE($4, true), $5, $6)
+            \\    email, name, bid, password_hash, is_active, phone, bio
+            \\) VALUES ($1, $2, $3, $4, COALESCE($5, true), $6, $7)
             \\RETURNING id
         ;
     }
@@ -78,6 +82,7 @@ bio: ?[]const u8,
     pub fn insertParams(data: CreateInput) struct {
         []const u8,
         []const u8,
+        ?[]const u8,
         []const u8,
         ?bool,
         ?[]const u8,
@@ -86,6 +91,7 @@ bio: ?[]const u8,
         return .{
             data.email,
             data.name,
+            data.bid,
             data.password_hash,
             data.is_active,
             data.phone,
@@ -98,11 +104,12 @@ bio: ?[]const u8,
             \\UPDATE users SET
             \\    email = COALESCE($2, email),
             \\    name = COALESCE($3, name),
-            \\    password_hash = COALESCE($4, password_hash),
-            \\    is_active = COALESCE($5, is_active),
-            \\    updated_at = COALESCE($6, updated_at),
-            \\    phone = COALESCE($7, phone),
-            \\    bio = COALESCE($8, bio),
+            \\    bid = COALESCE($4, bid),
+            \\    password_hash = COALESCE($5, password_hash),
+            \\    is_active = COALESCE($6, is_active),
+            \\    updated_at = COALESCE($7, updated_at),
+            \\    phone = COALESCE($8, phone),
+            \\    bio = COALESCE($9, bio),
             \\    updated_at = CURRENT_TIMESTAMP
             \\WHERE id = $1
         ;
@@ -110,6 +117,7 @@ bio: ?[]const u8,
 
     pub fn updateParams(id: []const u8, data: UpdateInput) struct {
         []const u8,
+        ?[]const u8,
         ?[]const u8,
         ?[]const u8,
         ?[]const u8,
@@ -122,6 +130,7 @@ bio: ?[]const u8,
             id,
             data.email,
             data.name,
+            data.bid,
             data.password_hash,
             data.is_active,
             data.updated_at,
@@ -133,10 +142,11 @@ bio: ?[]const u8,
     pub fn upsertSQL() []const u8 {
         return
             \\INSERT INTO users (
-            \\    email, name, password_hash, is_active, phone, bio
-            \\) VALUES ($1, $2, $3, $4, $5, $6)
+            \\    email, name, bid, password_hash, is_active, phone, bio
+            \\) VALUES ($1, $2, $3, $4, $5, $6, $7)
             \\ON CONFLICT (email) DO UPDATE SET
             \\    name = EXCLUDED.name,
+            \\    bid = EXCLUDED.bid,
             \\    password_hash = EXCLUDED.password_hash,
             \\    is_active = EXCLUDED.is_active,
             \\    phone = EXCLUDED.phone,
@@ -149,6 +159,7 @@ bio: ?[]const u8,
     pub fn upsertParams(data: CreateInput) struct {
         []const u8,
         []const u8,
+        ?[]const u8,
         []const u8,
         ?bool,
         ?[]const u8,
@@ -157,6 +168,7 @@ bio: ?[]const u8,
         return .{
             data.email,
             data.name,
+            data.bid,
             data.password_hash,
             data.is_active,
             data.phone,
@@ -206,6 +218,7 @@ bio: ?[]const u8,
         id: [36]u8,
         email: []const u8,
         name: []const u8,
+        bid: ?[]const u8,
         password_hash: []const u8,
         is_active: bool,
         created_at: i64,
@@ -221,6 +234,7 @@ bio: ?[]const u8,
             .id = try pg.uuidToHex(&self.id[0..16].*),
             .email = self.email,
             .name = self.name,
+            .bid = self.bid,
             .password_hash = self.password_hash,
             .is_active = self.is_active,
             .created_at = self.created_at,
@@ -236,6 +250,7 @@ bio: ?[]const u8,
         id: [36]u8,
         email: []const u8,
         name: []const u8,
+        bid: ?[]const u8,
         is_active: bool,
         created_at: i64,
         updated_at: i64,
@@ -250,6 +265,7 @@ bio: ?[]const u8,
             .id = try pg.uuidToHex(&self.id[0..16].*),
             .email = self.email,
             .name = self.name,
+            .bid = self.bid,
             .is_active = self.is_active,
             .created_at = self.created_at,
             .updated_at = self.updated_at,
