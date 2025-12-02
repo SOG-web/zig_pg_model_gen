@@ -12,6 +12,7 @@ pub const Relationship = @import("schema.zig").Relationship;
 pub const RelationshipType = @import("schema.zig").RelationshipType;
 pub const Schema = @import("schema.zig").Schema;
 pub const snapshot = @import("snapshot.zig");
+pub const diff = @import("diff.zig");
 pub const sql_generator = @import("sql_generator.zig");
 pub const TableSchema = @import("table.zig");
 
