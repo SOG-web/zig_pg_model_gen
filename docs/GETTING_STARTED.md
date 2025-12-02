@@ -46,6 +46,9 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // Migration directory option (customizable)
+    const migrations_dir = b.option([]const u8, "migrations-dir", "Directory containing migration files") orelse "migrations";
+
     // Get FluentORM dependency
     const fluentorm_dep = b.dependency("fluentorm", .{
         .target = target,
@@ -71,7 +74,7 @@ pub fn build(b: *std.Build) void {
     const gen_step = b.step("generate", "Generate registry and runner");
     const gen_exe = fluentorm_dep.artifact("fluentzig-gen");
     const gen_cmd = b.addRunArtifact(gen_exe);
-    gen_cmd.addArgs(&.{ "schemas", "src/models/generated" });
+    gen_cmd.addArgs(&.{ "schemas", "src/models/generated", migrations_dir });
     gen_step.dependOn(&gen_cmd.step);
 
     // Step 2: Generate models
@@ -88,6 +91,31 @@ pub fn build(b: *std.Build) void {
     });
     const gen_models_step = b.step("generate-models", "Generate models");
     gen_models_step.dependOn(&b.addRunArtifact(runner_exe).step);
+
+    // Migration steps
+    const migrate_exe = fluentorm_dep.artifact("fluent-migrate");
+
+    // migrate-up: Run pending migrations
+    const migrate_up_cmd = b.addRunArtifact(migrate_exe);
+    migrate_up_cmd.addArgs(&.{ "--migrations-dir", migrations_dir, "up" });
+    const migrate_up_step = b.step("migrate-up", "Run pending database migrations");
+    migrate_up_step.dependOn(&migrate_up_cmd.step);
+
+    // migrate-status: Show migration status
+    const migrate_status_cmd = b.addRunArtifact(migrate_exe);
+    migrate_status_cmd.addArgs(&.{ "--migrations-dir", migrations_dir, "status" });
+    const migrate_status_step = b.step("migrate-status", "Show database migration status");
+    migrate_status_step.dependOn(&migrate_status_cmd.step);
+
+    // migrate-down: Rollback last migration
+    const migrate_down_cmd = b.addRunArtifact(migrate_exe);
+    migrate_down_cmd.addArgs(&.{ "--migrations-dir", migrations_dir, "down" });
+    const migrate_down_step = b.step("migrate-down", "Rollback last database migration");
+    migrate_down_step.dependOn(&migrate_down_cmd.step);
+
+    // Default migrate step (alias)
+    const migrate_step = b.step("migrate", "Run database migrations");
+    migrate_step.dependOn(&migrate_up_cmd.step);
 
     // Run step
     const run_cmd = b.addRunArtifact(exe);
@@ -172,23 +200,39 @@ This creates:
 - `src/models/generated/root.zig` - Barrel exports
 - `migrations/users.sql` - SQL migration file
 
-## Step 6: Set Up PostgreSQL
+## Step 6: Set Up Database and Run Migrations
 
-Create your database:
+Create your database and set environment variables:
 
 ```bash
 createdb my_app_db
+
+export FLUENT_DB_HOST=localhost
+export FLUENT_DB_PORT=5432
+export FLUENT_DB_NAME=my_app_db
+export FLUENT_DB_USER=postgres
+export FLUENT_DB_PASSWORD=your_password
 ```
 
-Run the generated migrations:
+Run the migrations using the built-in migration system:
 
 ```bash
-# First, create the tables
-psql -U postgres -d my_app_db -f migrations/tables/01_users.sql
+# Run all pending migrations
+zig build migrate
 
-# Then apply foreign key constraints (if any)
-psql -U postgres -d my_app_db -f migrations/constraints/*_fk.sql
+# Check migration status
+zig build migrate-status
+
+# Rollback if needed
+zig build migrate-down
 ```
+
+The migration system will:
+
+- Create the necessary database tables
+- Track applied migrations in a `_fluent_migrations` table
+- Verify migration checksums for safety
+- Run migrations in transactions
 
 ## Step 7: Write Your First Application
 
@@ -374,35 +418,37 @@ if (try post.fetchPostAuthor(&pool, allocator)) |author| {
 
 ## Common Issues
 
+## Common Issues
+
 ### Error: `gen_random_uuid()` not found
 
-**Solution**: The migration should create the UUID extension automatically. If not, run:
-
-```sql
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-```
+**Solution**: The migration system automatically creates the UUID extension. If it fails, ensure your database user has the necessary permissions.
 
 ### Error: Cannot connect to database
 
-**Solution**: Ensure PostgreSQL is running and credentials are correct:
+**Solution**: Ensure PostgreSQL is running and environment variables are set correctly:
 
 ```bash
-psql -U postgres -d my_app_db
+# Test connection
+psql -U $FLUENT_DB_USER -d $FLUENT_DB_NAME -h $FLUENT_DB_HOST -p $FLUENT_DB_PORT
 ```
+
+### Error: Migration checksum mismatch
+
+**Solution**: Never modify migration files after they've been applied. If you need to change something, create a new migration.
 
 ### Error: Table already exists
 
-**Solution**: Drop the table and run migrations again:
-
-```sql
-DROP TABLE users CASCADE;
-```
-
-Then run the migrations:
+**Solution**: Check migration status and only run pending migrations:
 
 ```bash
-psql -U postgres -d my_app_db -f migrations/tables/01_users.sql
+zig build migrate-status
+zig build migrate
 ```
+
+### Error: Foreign key constraint fails
+
+**Solution**: Ensure schema files are numbered correctly for dependency order (e.g., `01_users.zig` before `02_posts.zig`).
 
 ## Project Structure
 
@@ -427,12 +473,13 @@ my-app/
 │           ├── users.zig
 │           ├── posts.zig
 │           └── root.zig
-└── migrations/
-    ├── tables/
-    │   ├── 01_users.sql
-    │   └── 02_posts.sql
-    └── constraints/
-        └── 02_posts_fk.sql
+├── migrations/           # Migration files
+│   ├── 1764673549_create_users.sql
+│   ├── 1764673549_create_users_down.sql
+│   └── ...
+└── zig-out/
+    └── bin/
+        └── fluent-migrate  # Migration runner
 ```
 
 ## Summary

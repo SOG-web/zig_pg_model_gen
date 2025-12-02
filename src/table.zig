@@ -78,6 +78,21 @@ pub fn create(name: []const u8, allocator: std.mem.Allocator, builder: *const fn
     return self;
 }
 
+/// Create an empty TableSchema without calling a builder function.
+/// Useful for schema merging where multiple builders will be called.
+pub fn createEmpty(name: []const u8, allocator: std.mem.Allocator) !TableSchema {
+    return TableSchema{
+        .name = name,
+        .allocator = allocator,
+        .fields = std.ArrayList(Field){},
+        .alters = std.ArrayList(Field){},
+        .indexes = std.ArrayList(Index){},
+        .drop_indexes = std.ArrayList([]const u8){},
+        .relationships = std.ArrayList(Relationship){},
+        .has_many_relationships = std.ArrayList(HasManyRelationship){},
+    };
+}
+
 pub fn deinit(self: *TableSchema) void {
     self.fields.deinit(self.allocator);
     self.alters.deinit(self.allocator);

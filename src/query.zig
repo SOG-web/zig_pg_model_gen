@@ -158,8 +158,6 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             self.arena.deinit();
         }
 
-        // ==================== SELECT ====================
-
         /// Add a SELECT clause
         ///
         /// Example:
@@ -220,8 +218,6 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             self.select_clauses.append(self.arena.allocator(), _raw) catch return self;
             return self;
         }
-
-        // ==================== WHERE ====================
 
         /// Add a WHERE clause. Multiple calls are ANDed together.
         ///
@@ -494,8 +490,6 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             return self;
         }
 
-        // ==================== JOIN ====================
-
         /// Add a JOIN clause
         ///
         /// Example:
@@ -551,8 +545,6 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
         pub fn fullJoin(self: *Self, table: []const u8, on_clause: []const u8) *Self {
             return self.join(.full, table, on_clause);
         }
-
-        // ==================== GROUP BY / HAVING ====================
 
         /// Add GROUP BY clause
         ///
@@ -620,8 +612,6 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             return self;
         }
 
-        // ==================== ORDER BY ====================
-
         /// Set ORDER BY clause (can be called multiple times)
         ///
         /// Example:
@@ -655,8 +645,6 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             self.order_clauses.append(self.arena.allocator(), _raw) catch return self;
             return self;
         }
-
-        // ==================== LIMIT / OFFSET ====================
 
         /// Set LIMIT
         ///
@@ -693,8 +681,6 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             return self;
         }
 
-        // ==================== SOFT DELETES ====================
-
         /// Include soft-deleted records
         pub fn withDeleted(self: *Self) *Self {
             self.include_deleted = true;
@@ -720,8 +706,6 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             }) catch return self;
             return self;
         }
-
-        // ==================== SQL BUILDING ====================
 
         pub fn buildSql(self: *Self, allocator: std.mem.Allocator) ![]const u8 {
             var sql = std.ArrayList(u8){};
@@ -826,8 +810,6 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
 
             return sql.toOwnedSlice(allocator);
         }
-
-        // ==================== EXECUTION METHODS ====================
 
         /// Execute query and return list of items
         pub fn fetch(self: *Self, db: *pg.Pool, allocator: std.mem.Allocator, args: anytype) ![]K {
@@ -985,8 +967,6 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
 
             return items.toOwnedSlice(allocator);
         }
-
-        // ==================== AGGREGATE HELPERS ====================
 
         /// Get the sum of a column
         ///

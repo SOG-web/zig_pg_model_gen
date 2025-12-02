@@ -19,20 +19,26 @@ const Users = @This();
 id: []const u8,
 email: []const u8,
 name: []const u8,
+bid: ?[]const u8,
 password_hash: []const u8,
 is_active: bool,
 created_at: i64,
 updated_at: i64,
 deleted_at: ?i64,
+phone: ?[]const u8,
+bio: ?[]const u8,
     pub const FieldEnum = enum {
         id,
         email,
         name,
+        bid,
         password_hash,
         is_active,
         created_at,
         updated_at,
         deleted_at,
+        phone,
+        bio,
     };
 
 
@@ -40,17 +46,23 @@ deleted_at: ?i64,
     pub const CreateInput = struct {
         email: []const u8,
         name: []const u8,
+        bid: ?[]const u8,
         password_hash: []const u8,
         is_active: ?bool = null,
+        phone: ?[]const u8 = null,
+        bio: ?[]const u8 = null,
     };
 
     // Input type for updating existing records
     pub const UpdateInput = struct {
         email: ?[]const u8 = null,
         name: ?[]const u8 = null,
+        bid: ?[]const u8 = null,
         password_hash: ?[]const u8 = null,
         is_active: ?bool = null,
         updated_at: ?i64 = null,
+        phone: ?[]const u8 = null,
+        bio: ?[]const u8 = null,
     };
 
     // Model configuration
@@ -61,8 +73,8 @@ deleted_at: ?i64,
     pub fn insertSQL() []const u8 {
         return
             \\INSERT INTO users (
-            \\    email, name, password_hash, is_active
-            \\) VALUES ($1, $2, $3, COALESCE($4, true))
+            \\    email, name, bid, password_hash, is_active, phone, bio
+            \\) VALUES ($1, $2, $3, $4, COALESCE($5, true), $6, $7)
             \\RETURNING id
         ;
     }
@@ -70,14 +82,20 @@ deleted_at: ?i64,
     pub fn insertParams(data: CreateInput) struct {
         []const u8,
         []const u8,
+        ?[]const u8,
         []const u8,
         ?bool,
+        ?[]const u8,
+        ?[]const u8,
     } {
         return .{
             data.email,
             data.name,
+            data.bid,
             data.password_hash,
             data.is_active,
+            data.phone,
+            data.bio,
         };
     }
 
@@ -86,9 +104,12 @@ deleted_at: ?i64,
             \\UPDATE users SET
             \\    email = COALESCE($2, email),
             \\    name = COALESCE($3, name),
-            \\    password_hash = COALESCE($4, password_hash),
-            \\    is_active = COALESCE($5, is_active),
-            \\    updated_at = COALESCE($6, updated_at),
+            \\    bid = COALESCE($4, bid),
+            \\    password_hash = COALESCE($5, password_hash),
+            \\    is_active = COALESCE($6, is_active),
+            \\    updated_at = COALESCE($7, updated_at),
+            \\    phone = COALESCE($8, phone),
+            \\    bio = COALESCE($9, bio),
             \\    updated_at = CURRENT_TIMESTAMP
             \\WHERE id = $1
         ;
@@ -99,28 +120,37 @@ deleted_at: ?i64,
         ?[]const u8,
         ?[]const u8,
         ?[]const u8,
+        ?[]const u8,
         ?bool,
         ?i64,
+        ?[]const u8,
+        ?[]const u8,
     } {
         return .{
             id,
             data.email,
             data.name,
+            data.bid,
             data.password_hash,
             data.is_active,
             data.updated_at,
+            data.phone,
+            data.bio,
         };
     }
 
     pub fn upsertSQL() []const u8 {
         return
             \\INSERT INTO users (
-            \\    email, name, password_hash, is_active
-            \\) VALUES ($1, $2, $3, $4)
+            \\    email, name, bid, password_hash, is_active, phone, bio
+            \\) VALUES ($1, $2, $3, $4, $5, $6, $7)
             \\ON CONFLICT (email) DO UPDATE SET
             \\    name = EXCLUDED.name,
+            \\    bid = EXCLUDED.bid,
             \\    password_hash = EXCLUDED.password_hash,
             \\    is_active = EXCLUDED.is_active,
+            \\    phone = EXCLUDED.phone,
+            \\    bio = EXCLUDED.bio,
             \\    updated_at = CURRENT_TIMESTAMP
             \\RETURNING id
         ;
@@ -129,14 +159,20 @@ deleted_at: ?i64,
     pub fn upsertParams(data: CreateInput) struct {
         []const u8,
         []const u8,
+        ?[]const u8,
         []const u8,
         ?bool,
+        ?[]const u8,
+        ?[]const u8,
     } {
         return .{
             data.email,
             data.name,
+            data.bid,
             data.password_hash,
             data.is_active,
+            data.phone,
+            data.bio,
         };
     }
 
@@ -182,11 +218,14 @@ deleted_at: ?i64,
         id: [36]u8,
         email: []const u8,
         name: []const u8,
+        bid: ?[]const u8,
         password_hash: []const u8,
         is_active: bool,
         created_at: i64,
         updated_at: i64,
         deleted_at: ?i64,
+        phone: ?[]const u8,
+        bio: ?[]const u8,
     };
 
     /// Convert model to JSON-safe response with UUIDs as hex strings
@@ -195,11 +234,14 @@ deleted_at: ?i64,
             .id = try pg.uuidToHex(&self.id[0..16].*),
             .email = self.email,
             .name = self.name,
+            .bid = self.bid,
             .password_hash = self.password_hash,
             .is_active = self.is_active,
             .created_at = self.created_at,
             .updated_at = self.updated_at,
             .deleted_at = self.deleted_at,
+            .phone = self.phone,
+            .bio = self.bio,
         };
     }
 
@@ -208,10 +250,13 @@ deleted_at: ?i64,
         id: [36]u8,
         email: []const u8,
         name: []const u8,
+        bid: ?[]const u8,
         is_active: bool,
         created_at: i64,
         updated_at: i64,
         deleted_at: ?i64,
+        phone: ?[]const u8,
+        bio: ?[]const u8,
     };
 
     /// Convert model to JSON-safe response excluding redacted fields (passwords, tokens, etc.)
@@ -220,10 +265,13 @@ deleted_at: ?i64,
             .id = try pg.uuidToHex(&self.id[0..16].*),
             .email = self.email,
             .name = self.name,
+            .bid = self.bid,
             .is_active = self.is_active,
             .created_at = self.created_at,
             .updated_at = self.updated_at,
             .deleted_at = self.deleted_at,
+            .phone = self.phone,
+            .bio = self.bio,
         };
     }
     // Relationship methods

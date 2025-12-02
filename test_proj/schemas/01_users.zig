@@ -4,6 +4,9 @@
 const fluentorm = @import("fluentorm");
 const TableSchema = fluentorm.TableSchema;
 
+/// Table name for schema merging - multiple schemas with same table_name will be merged
+pub const table_name = "users";
+
 /// Build function called by the registry generator
 pub fn build(t: *TableSchema) void {
     // Primary key - UUID auto-generated
@@ -24,6 +27,12 @@ pub fn build(t: *TableSchema) void {
     // User's name - required
     t.string(.{
         .name = "name",
+    });
+
+    // User's bio - optional
+    t.string(.{
+        .name = "bid",
+        .not_null = false,
     });
 
     // Password hash - required, redacted from JSON responses

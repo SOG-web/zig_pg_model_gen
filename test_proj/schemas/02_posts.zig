@@ -4,6 +4,9 @@
 const fluentorm = @import("fluentorm");
 const TableSchema = fluentorm.TableSchema;
 
+/// Table name for schema merging - multiple schemas with same table_name will be merged
+pub const table_name = "posts";
+
 /// Build function called by the registry generator
 pub fn build(t: *TableSchema) void {
     // Primary key - UUID auto-generated

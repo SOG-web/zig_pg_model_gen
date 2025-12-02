@@ -1,4 +1,7 @@
+-- Migration: create_posts
 -- Table: posts
+-- Type: create_table
+
 CREATE TABLE IF NOT EXISTS posts (
   id UUID PRIMARY KEY,
   title TEXT NOT NULL,
@@ -10,5 +13,3 @@ CREATE TABLE IF NOT EXISTS posts (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   deleted_at TIMESTAMP
 );
-
-CREATE INDEX IF NOT EXISTS idx_posts_user_created ON posts (user_id, created_at);

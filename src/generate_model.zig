@@ -50,6 +50,7 @@ pub fn main() !void {
         runner_path,
         output_dir,
         sql_output_dir,
+        schemas_dir,
     );
     std.debug.print("✅ Generated runner at {s}\n", .{runner_path});
 
@@ -82,6 +83,7 @@ fn generateRunner(
     output_path: []const u8,
     output_dir: []const u8,
     sql_output_dir: []const u8,
+    schemas_dir: []const u8,
 ) !void {
     const file = try std.fs.cwd().createFile(output_path, .{});
     defer file.close();
@@ -92,12 +94,15 @@ fn generateRunner(
         \\const fluentorm = @import("fluentorm");
         \\const sql_generator = fluentorm.sql_generator;
         \\const model_generator = fluentorm.model_generator;
+        \\const snapshot = fluentorm.snapshot;
+        \\const diff = fluentorm.diff;
         \\
         \\pub fn main() !void {{
         \\    var gpa = std.heap.GeneralPurposeAllocator(.{{}}){{}};
         \\    defer _ = gpa.deinit();
         \\    const allocator = gpa.allocator();
         \\
+        \\    // Use merged schemas - multiple schema files with same table_name are combined
         \\    const schemas = try registry.getAllSchemas(allocator);
         \\    defer {{
         \\        for (schemas) |*s| s.deinit();
@@ -106,29 +111,76 @@ fn generateRunner(
         \\
         \\    const output_dir = "{s}";
         \\    const sql_output_dir = "{s}";
+        \\    const snapshot_file = "{s}/.fluent_snapshot.json";
         \\
         \\    try std.fs.cwd().makePath(output_dir);
         \\    try std.fs.cwd().makePath(sql_output_dir);
         \\
-        \\    // Get file prefixes from registry
-        \\    const prefixes = registry.getFilePrefixes();
+        \\    // Create snapshot of current schema state
+        \\    const current_snapshot = try snapshot.createDatabaseSnapshot(allocator, schemas);
+        \\    defer current_snapshot.deinit(allocator);
         \\
-        \\    for (schemas, 0..) |schema, i| {{
-        \\        // Use schema name as the source file name for comments
-        \\        const schema_file = try std.fmt.allocPrint(allocator, "{{s}}.zig", .{{schema.name}});
+        \\    // Try to load previous snapshot
+        \\    const prev_snapshot_result = try snapshot.loadSnapshot(allocator, snapshot_file);
+        \\
+        \\    // Compute diff and generate migrations
+        \\    if (prev_snapshot_result) |prev| {{
+        \\        defer prev.deinit();
+        \\
+        \\        const schema_diff = try diff.diffSnapshots(allocator, prev.value, current_snapshot);
+        \\        defer schema_diff.deinit(allocator);
+        \\
+        \\        if (schema_diff.has_changes) {{
+        \\            // Generate incremental migration files - one per change
+        \\            const generated_files = try sql_generator.writeIncrementalMigrationFiles(allocator, schema_diff, sql_output_dir);
+        \\            defer {{
+        \\                for (generated_files) |f| allocator.free(f);
+        \\                allocator.free(generated_files);
+        \\            }}
+        \\
+        \\            std.debug.print("Generated {{d}} migration file(s):\n", .{{generated_files.len}});
+        \\            for (generated_files) |f| {{
+        \\                std.debug.print("  - {{s}}\n", .{{f}});
+        \\            }}
+        \\        }} else {{
+        \\            std.debug.print("No schema changes detected.\n", .{{}});
+        \\        }}
+        \\    }} else {{
+        \\        // First run - generate initial migration with all tables
+        \\        const schema_diff = try diff.diffSnapshots(allocator, null, current_snapshot);
+        \\        defer schema_diff.deinit(allocator);
+        \\
+        \\        if (schema_diff.has_changes) {{
+        \\            // Generate incremental migration files - one per change
+        \\            const generated_files = try sql_generator.writeIncrementalMigrationFiles(allocator, schema_diff, sql_output_dir);
+        \\            defer {{
+        \\                for (generated_files) |f| allocator.free(f);
+        \\                allocator.free(generated_files);
+        \\            }}
+        \\
+        \\            std.debug.print("Generated {{d}} initial migration file(s):\n", .{{generated_files.len}});
+        \\            for (generated_files) |f| {{
+        \\                std.debug.print("  - {{s}}\n", .{{f}});
+        \\            }}
+        \\        }}
+        \\    }}
+        \\
+        \\    // Save current snapshot for next run
+        \\    try snapshot.saveSnapshot(allocator, current_snapshot, snapshot_file);
+        \\    std.debug.print("Snapshot saved to {{s}}\n", .{{snapshot_file}});
+        \\
+        \\    // Generate models (always)
+        \\    for (schemas) |schema_item| {{
+        \\        const schema_file = try std.fmt.allocPrint(allocator, "{{s}}.zig", .{{schema_item.name}});
         \\        defer allocator.free(schema_file);
-        \\
-        \\        // Get the file prefix (e.g., "01", "02") for ordering migrations
-        \\        const file_prefix = prefixes[i];
-        \\
-        \\        try sql_generator.writeSchemaToFile(allocator, schema, sql_output_dir, file_prefix);
-        \\        try model_generator.generateModel(allocator, schema, schema_file, output_dir);
+        \\        try model_generator.generateModel(allocator, schema_item, schema_file, output_dir);
         \\    }}
         \\
         \\    try model_generator.generateBarrelFile(allocator, schemas, output_dir);
+        \\    std.debug.print("Models generated in {{s}}\n", .{{output_dir}});
         \\}}
         \\
-    , .{ output_dir, sql_output_dir });
+    , .{ output_dir, sql_output_dir, schemas_dir });
     defer allocator.free(content);
 
     try file.writeAll(content);

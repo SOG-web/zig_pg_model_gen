@@ -1,8 +1,11 @@
+-- Migration: create_categories
 -- Table: categories
+-- Type: create_table
+
 CREATE TABLE IF NOT EXISTS categories (
   id UUID PRIMARY KEY,
-  name TEXT UNIQUE NOT NULL,
-  slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL UNIQUE,
+  slug TEXT NOT NULL UNIQUE,
   description TEXT,
   color TEXT DEFAULT '#3B82F6',
   sort_order INT NOT NULL DEFAULT 0,
@@ -10,5 +13,3 @@ CREATE TABLE IF NOT EXISTS categories (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_slug ON categories (slug);

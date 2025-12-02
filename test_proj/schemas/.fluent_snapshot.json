@@ -1,0 +1,723 @@
+{
+  "version": 1,
+  "created_at": 1764674112,
+  "tables": [
+    {
+      "name": "users",
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "primary_key": true,
+          "unique": true,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "uuid"
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "primary_key": false,
+          "unique": true,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "bid",
+          "type": "text_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "password_hash",
+          "type": "text",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "is_active",
+          "type": "bool",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "true",
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "CURRENT_TIMESTAMP",
+          "auto_generated": true,
+          "auto_generate_type": "timestamp"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "CURRENT_TIMESTAMP",
+          "auto_generated": true,
+          "auto_generate_type": "timestamp"
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamp_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "timestamp"
+        },
+        {
+          "name": "phone",
+          "type": "text_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "bio",
+          "type": "text_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        }
+      ],
+      "indexes": [],
+      "relationships": [],
+      "has_many": [
+        {
+          "name": "user_posts",
+          "foreign_table": "posts",
+          "foreign_column": "user_id",
+          "local_column": "id"
+        },
+        {
+          "name": "user_comments",
+          "foreign_table": "comments",
+          "foreign_column": "user_id",
+          "local_column": "id"
+        }
+      ]
+    },
+    {
+      "name": "posts",
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "primary_key": true,
+          "unique": true,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "uuid"
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "uuid"
+        },
+        {
+          "name": "is_published",
+          "type": "bool",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "false",
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "view_count",
+          "type": "i32",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "0",
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "CURRENT_TIMESTAMP",
+          "auto_generated": true,
+          "auto_generate_type": "timestamp"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "CURRENT_TIMESTAMP",
+          "auto_generated": true,
+          "auto_generate_type": "timestamp"
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamp_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "timestamp"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_posts_user_created",
+          "columns": [
+            "user_id",
+            "created_at"
+          ],
+          "unique": false
+        }
+      ],
+      "relationships": [
+        {
+          "name": "post_author",
+          "column": "user_id",
+          "references_table": "users",
+          "references_column": "id",
+          "relationship_type": "many_to_one",
+          "on_delete": "cascade",
+          "on_update": "no_action"
+        }
+      ],
+      "has_many": [
+        {
+          "name": "post_comments",
+          "foreign_table": "comments",
+          "foreign_column": "post_id",
+          "local_column": "id"
+        }
+      ]
+    },
+    {
+      "name": "profiles",
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "primary_key": true,
+          "unique": true,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "uuid"
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "primary_key": false,
+          "unique": true,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "uuid"
+        },
+        {
+          "name": "bio",
+          "type": "text_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "avatar_url",
+          "type": "text_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "website",
+          "type": "text_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "location",
+          "type": "text_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "date_of_birth",
+          "type": "timestamp_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "timestamp"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "CURRENT_TIMESTAMP",
+          "auto_generated": true,
+          "auto_generate_type": "timestamp"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "CURRENT_TIMESTAMP",
+          "auto_generated": true,
+          "auto_generate_type": "timestamp"
+        }
+      ],
+      "indexes": [],
+      "relationships": [
+        {
+          "name": "profile_user",
+          "column": "user_id",
+          "references_table": "users",
+          "references_column": "id",
+          "relationship_type": "one_to_one",
+          "on_delete": "cascade",
+          "on_update": "no_action"
+        }
+      ],
+      "has_many": []
+    },
+    {
+      "name": "categories",
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "primary_key": true,
+          "unique": true,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "uuid"
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "primary_key": false,
+          "unique": true,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "slug",
+          "type": "text",
+          "primary_key": false,
+          "unique": true,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "description",
+          "type": "text_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "color",
+          "type": "text_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
+          "default_value": "'#3B82F6'",
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "sort_order",
+          "type": "i32",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "0",
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "is_active",
+          "type": "bool",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "true",
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "CURRENT_TIMESTAMP",
+          "auto_generated": true,
+          "auto_generate_type": "timestamp"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "CURRENT_TIMESTAMP",
+          "auto_generated": true,
+          "auto_generate_type": "timestamp"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_categories_slug",
+          "columns": [
+            "slug"
+          ],
+          "unique": true
+        }
+      ],
+      "relationships": [],
+      "has_many": [
+        {
+          "name": "category_posts",
+          "foreign_table": "post_categories",
+          "foreign_column": "category_id",
+          "local_column": "id"
+        }
+      ]
+    },
+    {
+      "name": "post_categories",
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "primary_key": true,
+          "unique": true,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "uuid"
+        },
+        {
+          "name": "post_id",
+          "type": "uuid",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "uuid"
+        },
+        {
+          "name": "category_id",
+          "type": "uuid",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "uuid"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "CURRENT_TIMESTAMP",
+          "auto_generated": true,
+          "auto_generate_type": "timestamp"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_post_categories_unique",
+          "columns": [
+            "post_id",
+            "category_id"
+          ],
+          "unique": true
+        }
+      ],
+      "relationships": [
+        {
+          "name": "junction_post",
+          "column": "post_id",
+          "references_table": "posts",
+          "references_column": "id",
+          "relationship_type": "many_to_one",
+          "on_delete": "cascade",
+          "on_update": "no_action"
+        },
+        {
+          "name": "junction_category",
+          "column": "category_id",
+          "references_table": "categories",
+          "references_column": "id",
+          "relationship_type": "many_to_one",
+          "on_delete": "cascade",
+          "on_update": "no_action"
+        }
+      ],
+      "has_many": []
+    },
+    {
+      "name": "comments",
+      "fields": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "primary_key": true,
+          "unique": true,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "uuid"
+        },
+        {
+          "name": "post_id",
+          "type": "uuid",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "uuid"
+        },
+        {
+          "name": "user_id",
+          "type": "uuid",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "uuid"
+        },
+        {
+          "name": "parent_id",
+          "type": "uuid_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "uuid"
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "is_approved",
+          "type": "bool",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "true",
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "like_count",
+          "type": "i32",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "0",
+          "auto_generated": false,
+          "auto_generate_type": "none"
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "CURRENT_TIMESTAMP",
+          "auto_generated": true,
+          "auto_generate_type": "timestamp"
+        },
+        {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primary_key": false,
+          "unique": false,
+          "not_null": true,
+          "default_value": "CURRENT_TIMESTAMP",
+          "auto_generated": true,
+          "auto_generate_type": "timestamp"
+        },
+        {
+          "name": "deleted_at",
+          "type": "timestamp_optional",
+          "primary_key": false,
+          "unique": false,
+          "not_null": false,
+          "default_value": null,
+          "auto_generated": false,
+          "auto_generate_type": "timestamp"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_comments_post",
+          "columns": [
+            "post_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_comments_user",
+          "columns": [
+            "user_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "idx_comments_parent",
+          "columns": [
+            "parent_id"
+          ],
+          "unique": false
+        }
+      ],
+      "relationships": [
+        {
+          "name": "comment_post",
+          "column": "post_id",
+          "references_table": "posts",
+          "references_column": "id",
+          "relationship_type": "many_to_one",
+          "on_delete": "cascade",
+          "on_update": "no_action"
+        },
+        {
+          "name": "comment_author",
+          "column": "user_id",
+          "references_table": "users",
+          "references_column": "id",
+          "relationship_type": "many_to_one",
+          "on_delete": "cascade",
+          "on_update": "no_action"
+        },
+        {
+          "name": "comment_parent",
+          "column": "parent_id",
+          "references_table": "comments",
+          "references_column": "id",
+          "relationship_type": "many_to_one",
+          "on_delete": "cascade",
+          "on_update": "no_action"
+        }
+      ],
+      "has_many": [
+        {
+          "name": "comment_replies",
+          "foreign_table": "comments",
+          "foreign_column": "parent_id",
+          "local_column": "id"
+        }
+      ]
+    }
+  ]
+}

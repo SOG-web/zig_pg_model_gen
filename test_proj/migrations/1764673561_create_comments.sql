@@ -1,4 +1,7 @@
+-- Migration: create_comments
 -- Table: comments
+-- Type: create_table
+
 CREATE TABLE IF NOT EXISTS comments (
   id UUID PRIMARY KEY,
   post_id UUID NOT NULL,
@@ -11,7 +14,3 @@ CREATE TABLE IF NOT EXISTS comments (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   deleted_at TIMESTAMP
 );
-
-CREATE INDEX IF NOT EXISTS idx_comments_post ON comments (post_id);
-CREATE INDEX IF NOT EXISTS idx_comments_user ON comments (user_id);
-CREATE INDEX IF NOT EXISTS idx_comments_parent ON comments (parent_id);
