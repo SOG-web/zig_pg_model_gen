@@ -29,14 +29,48 @@ The number prefix (`01_`, `02_`, etc.) determines the order of SQL migrations, e
 
 ## Basic Schema Structure
 
-Every schema file must export a `build()` function that accepts a `*TableSchema`:
+Every schema file must export:
+
+1. **`table_name`**: A constant string defining the database table name (used for schema merging)
+2. **`build()`**: A function that accepts a `*TableSchema` and defines fields, constraints, and relationships
 
 ```zig
 const fluentorm = @import("fluentorm");
 const TableSchema = fluentorm.TableSchema;
 
+/// Table name for schema merging - multiple schemas with same table_name will be merged
+pub const table_name = "users";
+
+/// Build function called by the registry generator
 pub fn build(t: *TableSchema) void {
     // Define fields, constraints, and relationships here
+}
+```
+
+### Schema Merging
+
+Multiple schema files can define the same `table_name`. When this happens, FluentORM merges them into a single table definition. This is useful for:
+
+- Organizing large tables across multiple files
+- Adding relationships in separate files
+- Extending base schemas with additional fields
+
+```zig
+// schemas/01_users.zig
+pub const table_name = "users";
+pub fn build(t: *TableSchema) void {
+    t.uuid(.{ .name = "id", .primary_key = true });
+    t.string(.{ .name = "email" });
+}
+
+// schemas/02_users_relationships.zig
+pub const table_name = "users";  // Same table_name - will be merged
+pub fn build(t: *TableSchema) void {
+    t.hasMany(.{
+        .name = "user_posts",
+        .foreign_table = "posts",
+        .foreign_column = "user_id",
+    });
 }
 ```
 
@@ -357,6 +391,57 @@ t.foreign(.{
 });
 ```
 
+## Adding Indexes with `addIndexes()`
+
+Use `addIndexes()` to add database indexes for query performance optimization:
+
+```zig
+pub fn build(t: *TableSchema) void {
+    t.uuid(.{ .name = "id", .primary_key = true });
+    t.uuid(.{ .name = "user_id" });
+    t.dateTime(.{ .name = "created_at" });
+
+    // Add indexes for common query patterns
+    t.addIndexes(&.{
+        .{
+            .name = "idx_posts_user_created",
+            .columns = &.{ "user_id", "created_at" },
+            .unique = false,
+        },
+        .{
+            .name = "idx_posts_user_id",
+            .columns = &.{"user_id"},
+            .unique = false,
+        },
+    });
+}
+```
+
+### Index Options
+
+| Option    | Type           | Description                              |
+| --------- | -------------- | ---------------------------------------- |
+| `name`    | `[]const u8`   | **Required**: Index name in database     |
+| `columns` | `[][]const u8` | **Required**: Columns to include         |
+| `unique`  | `bool`         | Create a UNIQUE index (default: `false`) |
+
+### Generated SQL
+
+```sql
+CREATE INDEX idx_posts_user_created ON posts (user_id, created_at);
+CREATE UNIQUE INDEX idx_posts_unique_email ON users (email);
+```
+
+### When to Add Indexes
+
+- **Foreign key columns**: Speed up JOIN queries
+- **Frequently filtered columns**: WHERE clauses benefit from indexes
+- **Columns used in ORDER BY**: Improves sorting performance
+- **Composite indexes**: For queries filtering on multiple columns together
+- **Unique constraints**: Use `unique = true` to enforce uniqueness
+
+> **Note**: Adding too many indexes can slow down INSERT/UPDATE operations. Only index columns that are frequently queried.
+
 ## Modifying Fields with `alterField()`
 
 Use `alterField()` to modify properties of an existing field after it's been defined. This is useful for changing constraints, input modes, or other properties without redefining the entire field.
@@ -427,6 +512,9 @@ Here's a complete schema for a `users` table:
 ```zig
 const fluentorm = @import("fluentorm");
 const TableSchema = fluentorm.TableSchema;
+
+/// Table name for schema merging
+pub const table_name = "users";
 
 pub fn build(t: *TableSchema) void {
     // Primary key
