@@ -811,8 +811,75 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             return sql.toOwnedSlice(allocator);
         }
 
-        /// Execute query and return list of items
+        /// Check if the query has custom projections that can't be mapped to the model type.
+        /// This includes:
+        /// - Aggregate functions (COUNT, SUM, etc.)
+        /// - Raw selects with aliases (AS)
+        /// - JOIN clauses (result columns from multiple tables)
+        /// - GROUP BY clauses (typically used with aggregates)
+        /// - HAVING clauses (requires GROUP BY)
+        /// - DISTINCT with custom selects
+        fn hasCustomProjection(self: *Self) bool {
+            // JOINs produce columns from multiple tables - can't map to single model
+            if (self.join_clauses.items.len > 0) {
+                return true;
+            }
+
+            // GROUP BY typically means aggregation - result shape differs from model
+            if (self.group_clauses.items.len > 0) {
+                return true;
+            }
+
+            // HAVING requires GROUP BY and aggregates
+            if (self.having_clauses.items.len > 0) {
+                return true;
+            }
+
+            // Check select clauses for aggregates, aliases, or raw SQL patterns
+            for (self.select_clauses.items) |clause| {
+                // Check for aggregate function patterns: COUNT(, SUM(, AVG(, MIN(, MAX(
+                if (std.mem.indexOf(u8, clause, "(") != null) {
+                    return true;
+                }
+                // Check for AS alias (indicates custom projection)
+                if (std.mem.indexOf(u8, clause, " AS ") != null or
+                    std.mem.indexOf(u8, clause, " as ") != null)
+                {
+                    return true;
+                }
+                // Check for table.column pattern (indicates join-like select)
+                if (std.mem.indexOf(u8, clause, ".") != null) {
+                    return true;
+                }
+                // Check for wildcard with table prefix (e.g., "users.*")
+                if (std.mem.indexOf(u8, clause, ".*") != null) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// Execute query and return list of items.
+        /// Returns an error if the query contains custom projections that can't map to model type K:
+        /// - JOINs (use `fetchRaw` or `fetchAs` with a custom struct)
+        /// - GROUP BY / HAVING clauses
+        /// - Aggregate functions (selectAggregate)
+        /// - Raw selects with aliases or table prefixes
+        ///
+        /// Example:
+        /// ```zig
+        /// const users = try User.query()
+        ///     .where(.{ .field = .status, .operator = .eq, .value = "'active'" })
+        ///     .fetch(&pool, allocator, .{});
+        /// defer allocator.free(users);
+        /// ```
         pub fn fetch(self: *Self, db: *pg.Pool, allocator: std.mem.Allocator, args: anytype) ![]K {
+            // Guard: reject queries with custom projections that can't map to K
+            if (self.hasCustomProjection()) {
+                return error.CustomProjectionRequiresFetchAs;
+            }
+
             const temp_allocator = self.arena.allocator();
             const sql = try self.buildSql(temp_allocator);
 
@@ -828,11 +895,77 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             while (try mapper.next()) |item| {
                 try items.append(allocator, item);
             }
-            return items.toOwnedSlice();
+            return items.toOwnedSlice(allocator);
         }
 
-        /// Execute query and return first item or null
+        /// Execute query and return list of items mapped to a custom result type.
+        /// Use this when you have custom selects, aggregates, or need a different shape than the model.
+        ///
+        /// Example:
+        /// ```zig
+        /// const UserSummary = struct { id: i64, total_posts: i64 };
+        /// const summaries = try User.query()
+        ///     .select(&.{.id})
+        ///     .selectAggregate(.count, .id, "total_posts")
+        ///     .groupBy(&.{.id})
+        ///     .fetchAs(UserSummary, &pool, allocator, .{});
+        /// defer allocator.free(summaries);
+        /// ```
+        pub fn fetchAs(self: *Self, comptime R: type, db: *pg.Pool, allocator: std.mem.Allocator, args: anytype) ![]R {
+            const temp_allocator = self.arena.allocator();
+            const sql = try self.buildSql(temp_allocator);
+
+            var result = try db.queryOpts(sql, args, .{
+                .column_names = true,
+            });
+            defer result.deinit();
+
+            var items = std.ArrayList(R){};
+            errdefer items.deinit(allocator);
+
+            var mapper = result.mapper(R, .{ .allocator = allocator });
+            while (try mapper.next()) |item| {
+                try items.append(allocator, item);
+            }
+            return items.toOwnedSlice(allocator);
+        }
+
+        /// Execute query and return the raw pg.Result.
+        /// Use this for complex queries with joins, subqueries, or when you need full control.
+        /// The caller is responsible for calling result.deinit() when done.
+        ///
+        /// Example:
+        /// ```zig
+        /// var result = try User.query()
+        ///     .innerJoin("posts", "users.id = posts.user_id")
+        ///     .selectRaw("users.*, posts.title")
+        ///     .fetchRaw(&pool, .{});
+        /// defer result.deinit();
+        ///
+        /// while (try result.next()) |row| {
+        ///     const user_id = row.get(i64, 0);
+        ///     const post_title = row.get([]const u8, 1);
+        ///     // ...
+        /// }
+        /// ```
+        pub fn fetchRaw(self: *Self, db: *pg.Pool, args: anytype) !pg.Result {
+            const temp_allocator = self.arena.allocator();
+            const sql = try self.buildSql(temp_allocator);
+
+            return try db.queryOpts(sql, args, .{
+                .column_names = true,
+            });
+        }
+
+        /// Execute query and return first item or null.
+        /// Returns an error if the query contains custom projections (JOINs, GROUP BY, aggregates, etc.).
+        /// Use `firstAs` for custom result types or `firstRaw` for direct access.
         pub fn first(self: *Self, db: *pg.Pool, allocator: std.mem.Allocator, args: anytype) !?K {
+            // Guard: reject queries with custom projections that can't map to K
+            if (self.hasCustomProjection()) {
+                return error.CustomProjectionRequiresFetchAs;
+            }
+
             self.limit_val = 1;
             const temp_allocator = self.arena.allocator();
             const sql = try self.buildSql(temp_allocator);
@@ -846,6 +979,68 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             if (try mapper.next()) |item| {
                 return item;
             }
+            return null;
+        }
+
+        /// Execute query and return first item mapped to a custom result type, or null.
+        ///
+        /// Example:
+        /// ```zig
+        /// const UserStats = struct { id: i64, post_count: i64 };
+        /// const stats = try User.query()
+        ///     .select(&.{.id})
+        ///     .selectAggregate(.count, .id, "post_count")
+        ///     .where(.{ .field = .id, .operator = .eq, .value = "$1" })
+        ///     .firstAs(UserStats, &pool, allocator, .{user_id});
+        /// ```
+        pub fn firstAs(self: *Self, comptime R: type, db: *pg.Pool, allocator: std.mem.Allocator, args: anytype) !?R {
+            self.limit_val = 1;
+            const temp_allocator = self.arena.allocator();
+            const sql = try self.buildSql(temp_allocator);
+
+            var result = try db.queryOpts(sql, args, .{
+                .column_names = true,
+            });
+            defer result.deinit();
+
+            var mapper = result.mapper(R, .{ .allocator = allocator });
+            if (try mapper.next()) |item| {
+                return item;
+            }
+            return null;
+        }
+
+        /// Execute query and return first row as pg.QueryRow or null.
+        /// The caller is responsible for calling row.deinit() when done.
+        ///
+        /// Example:
+        /// ```zig
+        /// if (try User.query()
+        ///     .selectRaw("users.*, COUNT(posts.id) as post_count")
+        ///     .innerJoin("posts", "users.id = posts.user_id")
+        ///     .firstRaw(&pool, .{})) |row|
+        /// {
+        ///     defer row.deinit();
+        ///     const name = row.get([]const u8, 1);
+        ///     const post_count = row.get(i64, 2);
+        /// }
+        /// ```
+        pub fn firstRaw(self: *Self, db: *pg.Pool, args: anytype) !?pg.Result {
+            self.limit_val = 1;
+            const temp_allocator = self.arena.allocator();
+            const sql = try self.buildSql(temp_allocator);
+
+            var result = try db.queryOpts(sql, args, .{
+                .column_names = true,
+            });
+            defer result.deinit();
+            // Check if there's at least one row
+            if (try result.next()) |_| {
+                return try db.queryOpts(sql, args, .{
+                    .column_names = true,
+                });
+            }
+
             return null;
         }
 

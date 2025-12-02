@@ -317,9 +317,85 @@ Only get soft-deleted records.
 
 Executes the query and returns a slice of models.
 
+> [!IMPORTANT] > `fetch` will return `error.CustomProjectionRequiresFetchAs` if your query contains any of the following:
+>
+> - **JOINs** (`innerJoin`, `leftJoin`, `rightJoin`, `fullJoin`)
+> - **GROUP BY** clauses (`groupBy`, `groupByRaw`)
+> - **HAVING** clauses (`having`, `havingAggregate`)
+> - **Aggregate functions** (`selectAggregate`)
+> - **Raw selects with aliases** (e.g., `selectRaw("COUNT(*) AS total")`)
+> - **Table-prefixed columns** (e.g., `selectRaw("users.id")`)
+>
+> For these cases, use `fetchAs` with a custom struct or `fetchRaw` for direct result access.
+
+### `fetchAs(comptime R: type, db: *pg.Pool, allocator: Allocator, args: anytype) ![]R`
+
+Executes the query and returns a slice of a custom result type. Use this when your query produces a different shape than the model (e.g., with JOINs, aggregates, or custom selects).
+
+```zig
+const UserSummary = struct {
+    id: i64,
+    total_posts: i64
+};
+
+const summaries = try Users.query()
+    .select(&.{.id})
+    .selectAggregate(.count, .id, "total_posts")
+    .groupBy(&.{.id})
+    .fetchAs(UserSummary, &pool, allocator, .{});
+defer allocator.free(summaries);
+```
+
+### `fetchRaw(db: *pg.Pool, args: anytype) !pg.Result`
+
+Executes the query and returns the raw `pg.Result`. Use this for complex queries with JOINs, subqueries, or when you need full control over result processing.
+
+> [!NOTE]
+> The caller is responsible for calling `result.deinit()` when done.
+
+```zig
+var result = try Users.query()
+    .innerJoin("posts", "users.id = posts.user_id")
+    .selectRaw("users.*, posts.title")
+    .fetchRaw(&pool, .{});
+defer result.deinit();
+
+while (try result.next()) |row| {
+    const user_id = row.get(i64, 0);
+    const user_name = row.get([]const u8, 1);
+    const post_title = row.get([]const u8, 2);
+    // ...
+}
+```
+
 ### `first(db: *pg.Pool, allocator: Allocator, args: anytype) !?T`
 
 Executes the query with `LIMIT 1` and returns the first result or `null`.
+
+> [!IMPORTANT]
+> Like `fetch`, this method will return `error.CustomProjectionRequiresFetchAs` if the query contains JOINs, GROUP BY, aggregates, or other custom projections. Use `firstAs` or `firstRaw` instead.
+
+### `firstAs(comptime R: type, db: *pg.Pool, allocator: Allocator, args: anytype) !?R`
+
+Executes the query with `LIMIT 1` and returns the first result mapped to a custom type, or `null`.
+
+```zig
+const UserStats = struct { id: i64, post_count: i64 };
+
+const stats = try Users.query()
+    .select(&.{.id})
+    .selectAggregate(.count, .id, "post_count")
+    .where(.{ .field = .id, .operator = .eq, .value = "$1" })
+    .groupBy(&.{.id})
+    .firstAs(UserStats, &pool, allocator, .{user_id});
+```
+
+### `firstRaw(db: *pg.Pool, args: anytype) !?pg.Result`
+
+Executes the query with `LIMIT 1` and returns the raw `pg.Result`, or `null` if no rows found.
+
+> [!NOTE]
+> The caller is responsible for calling `result.deinit()` when done.
 
 ### `count(db: *pg.Pool, args: anytype) !i64`
 
@@ -441,9 +517,20 @@ struct {
 - `.min` (`MIN`)
 - `.max` (`MAX`)
 
-## Complex Query Example
+## Complex Query Examples
+
+### Using `fetchAs` for Aggregated Results
+
+When using JOINs, GROUP BY, or aggregates, you must use `fetchAs` with a custom struct:
 
 ```zig
+// Define a struct that matches the query's output shape
+const OrderStats = struct {
+    user_id: i64,
+    total: f64,
+    order_count: i64,
+};
+
 var query = Orders.query();
 defer query.deinit();
 
@@ -459,8 +546,14 @@ const results = try query
     .havingAggregate(.sum, .amount, .gt, "100")
     .orderBy(.{ .field = .user_id, .direction = .asc })
     .paginate(2, 10)
-    .fetch(&pool, allocator, .{});
+    .fetchAs(OrderStats, &pool, allocator, .{});  // Note: fetchAs, not fetch
 defer allocator.free(results);
+
+for (results) |stats| {
+    std.debug.print("User {d}: total={d}, orders={d}\n", .{
+        stats.user_id, stats.total, stats.order_count
+    });
+}
 ```
 
 Generates:
@@ -471,4 +564,42 @@ FROM orders INNER JOIN users ON orders.user_id = users.id
 WHERE status = 'completed' AND amount BETWEEN 10 AND 10000
 GROUP BY user_id HAVING SUM(amount) > 100
 ORDER BY user_id ASC LIMIT 10 OFFSET 10
+```
+
+### Using `fetchRaw` for Maximum Flexibility
+
+For complex JOINs where you need to access columns from multiple tables:
+
+```zig
+var result = try Users.query()
+    .selectRaw("users.id, users.name, posts.title, posts.created_at")
+    .innerJoin("posts", "users.id = posts.user_id")
+    .where(.{ .field = .id, .operator = .eq, .value = "$1" })
+    .fetchRaw(&pool, .{user_id});
+defer result.deinit();
+
+while (try result.next()) |row| {
+    const id = row.get(i64, 0);
+    const name = row.get([]const u8, 1);
+    const title = row.get([]const u8, 2);
+    const created_at = row.get(i64, 3);
+    // Process the row...
+}
+```
+
+### Simple Query with `fetch`
+
+For basic queries without JOINs or aggregates, use `fetch` directly:
+
+```zig
+const active_users = try Users.query()
+    .where(.{ .field = .status, .operator = .eq, .value = "'active'" })
+    .orderBy(.{ .field = .created_at, .direction = .desc })
+    .limit(10)
+    .fetch(&pool, allocator, .{});
+defer allocator.free(active_users);
+
+for (active_users) |user| {
+    std.debug.print("User: {s}\n", .{user.name});
+}
 ```
