@@ -94,7 +94,19 @@ pub const FieldType = enum {
 
     pub fn isOptional(self: FieldType) bool {
         return switch (self) {
-            .text_optional, .i64_optional, .timestamp_optional, .json_optional => true,
+            .uuid_optional,
+            .text_optional,
+            .bool_optional,
+            .i16_optional,
+            .i32_optional,
+            .i64_optional,
+            .f32_optional,
+            .f64_optional,
+            .timestamp_optional,
+            .json_optional,
+            .jsonb_optional,
+            .binary_optional,
+            => true,
             else => false,
         };
     }
@@ -117,6 +129,7 @@ pub const Field = struct {
 
     // Generation hints
     create_input: InputMode = .required,
+    /// If true, included in UpdateInput; if false, excluded.
     update_input: bool = true,
 
     // JSON response hints
