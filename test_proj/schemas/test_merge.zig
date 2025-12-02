@@ -10,7 +10,7 @@ pub fn main() !void {
     std.debug.print("Testing schema merging...\n\n", .{});
 
     // Get merged schemas
-    const schemas = try registry.getAllSchemasMerged(allocator);
+    const schemas = try registry.getAllSchemas(allocator);
     defer {
         for (schemas) |*s| {
             var schema = s;

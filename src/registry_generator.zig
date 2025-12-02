@@ -69,6 +69,7 @@ pub fn generateRegistry(schemas_dir: []const u8, output_file: []const u8) !void 
         if (!std.mem.endsWith(u8, entry.name, ".zig")) continue;
         if (std.mem.eql(u8, entry.name, "registry.zig")) continue;
         if (std.mem.eql(u8, entry.name, "runner.zig")) continue;
+        if (std.mem.startsWith(u8, entry.name, "test_")) continue; // Skip test files
 
         // Filename without .zig extension (e.g., "01_users")
         const filename = try allocator.dupe(u8, entry.name[0 .. entry.name.len - 4]);
@@ -206,47 +207,12 @@ pub fn generateRegistry(schemas_dir: []const u8, output_file: []const u8) !void 
     }
     try registry.appendSlice(allocator, "};\n\n");
 
-    // Keep backward compatibility with old schemas array
-    try registry.appendSlice(allocator, "/// Legacy: flat list of all schema builders (for backward compatibility)\n");
-    try registry.appendSlice(allocator, "pub const schemas = [_]SchemaBuilder{\n");
-    for (schema_files.items) |schema| {
-        var import_name = std.ArrayList(u8){};
-        defer import_name.deinit(allocator);
-        for (schema.filename) |c| {
-            if (c == '-' or c == '.') {
-                try import_name.append(allocator, '_');
-            } else {
-                try import_name.append(allocator, c);
-            }
-        }
-        const import_id = try import_name.toOwnedSlice(allocator);
-        defer allocator.free(import_id);
-
-        try registry.writer(allocator).print("    .{{ .name = \"{s}\", .builder_fn = @\"{s}_schema\".build }},\n", .{ schema.table_name, import_id });
-    }
-    try registry.appendSlice(allocator, "};\n\n");
-
-    // Generate file prefixes array for SQL migration ordering
-    try registry.appendSlice(allocator, "/// File prefixes for SQL migration ordering (e.g., \"01\", \"02\")\n");
-    try registry.appendSlice(allocator, "pub const file_prefixes = [_][]const u8{\n");
-    for (schema_files.items) |schema| {
-        // Extract the prefix (e.g., "01" from "01_users")
-        if (schema.filename.len >= 2) {
-            const prefix = schema.filename[0..2];
-            try registry.writer(allocator).print("    \"{s}\",\n", .{prefix});
-        }
-    }
-    try registry.appendSlice(allocator, "};\n\n");
-
-    try registry.appendSlice(allocator, "/// Get file prefixes for SQL migration ordering\n");
-    try registry.appendSlice(allocator, "pub fn getFilePrefixes() []const []const u8 {\n");
-    try registry.appendSlice(allocator, "    return &file_prefixes;\n");
-    try registry.appendSlice(allocator, "}\n\n");
-
-    // New function: get all schemas with merging
+    // Function: get all schemas with merging
     try registry.appendSlice(allocator,
-        \\/// Get all schemas, merging multiple files that share the same table_name
-        \\pub fn getAllSchemasMerged(allocator: std.mem.Allocator) ![]TableSchema {
+        \\/// Get all schemas, merging multiple files that share the same table_name.
+        \\/// Multiple schema files with the same `pub const table_name` will be combined
+        \\/// into a single TableSchema by calling all their build() functions sequentially.
+        \\pub fn getAllSchemas(allocator: std.mem.Allocator) ![]TableSchema {
         \\    var result = std.ArrayList(TableSchema){};
         \\    errdefer {
         \\        for (result.items) |*schema| {
@@ -260,38 +226,11 @@ pub fn generateRegistry(schemas_dir: []const u8, output_file: []const u8) !void 
         \\        var table = try TableSchema.createEmpty(table_info.name, allocator);
         \\        errdefer table.deinit();
         \\
-        \\        // Call all builder functions for this table
+        \\        // Call all builder functions for this table (merging fields, indexes, etc.)
         \\        for (table_info.builders) |builder| {
         \\            builder.builder_fn(&table);
         \\        }
         \\
-        \\        try result.append(allocator, table);
-        \\    }
-        \\
-        \\    return result.toOwnedSlice(allocator);
-        \\}
-        \\
-        \\
-    );
-
-    // Keep backward compatibility
-    try registry.appendSlice(allocator,
-        \\/// Legacy: Get all schemas without merging (for backward compatibility)
-        \\pub fn getAllSchemas(allocator: std.mem.Allocator) ![]TableSchema {
-        \\    var result = std.ArrayList(TableSchema){};
-        \\    errdefer {
-        \\        for (result.items) |*schema| {
-        \\            schema.deinit();
-        \\        }
-        \\        result.deinit(allocator);
-        \\    }
-        \\
-        \\    for (schemas) |schema_builder| {
-        \\        const table = try TableSchema.create(
-        \\            schema_builder.name,
-        \\            allocator,
-        \\            schema_builder.builder_fn,
-        \\        );
         \\        try result.append(allocator, table);
         \\    }
         \\
