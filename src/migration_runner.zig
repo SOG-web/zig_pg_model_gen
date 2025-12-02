@@ -1,7 +1,6 @@
 const std = @import("std");
 const pg = @import("pg");
 
-// Migration runner configuration from environment variables
 pub const Config = struct {
     host: []const u8,
     port: u16,
@@ -23,7 +22,6 @@ pub const Config = struct {
     }
 };
 
-// Migration file info
 pub const MigrationInfo = struct {
     name: []const u8,
     path: []const u8,
@@ -35,14 +33,12 @@ pub const MigrationInfo = struct {
     }
 };
 
-/// Applied migration record
 pub const AppliedMigration = struct {
     name: []const u8,
     checksum: []const u8,
     applied_at: i64,
 };
 
-/// Migration runner
 pub const MigrationRunner = struct {
     allocator: std.mem.Allocator,
     pool: *pg.Pool,
@@ -50,7 +46,6 @@ pub const MigrationRunner = struct {
 
     const Self = @This();
 
-    /// Initialize the migration runner
     pub fn init(allocator: std.mem.Allocator, config: Config, migrations_dir: []const u8) !Self {
         const pool = try pg.Pool.init(allocator, .{
             .size = 1,
@@ -76,7 +71,6 @@ pub const MigrationRunner = struct {
         self.pool.deinit();
     }
 
-    /// Ensure the migrations tracking table exists
     pub fn ensureMigrationsTable(self: *Self) !void {
         _ = try self.pool.exec(
             \\CREATE TABLE IF NOT EXISTS _fluent_migrations (
@@ -88,7 +82,6 @@ pub const MigrationRunner = struct {
         , .{});
     }
 
-    /// Get list of applied migrations from database
     pub fn getAppliedMigrations(self: *Self) ![]AppliedMigration {
         var result = try self.pool.query(
             "SELECT name, checksum, EXTRACT(EPOCH FROM applied_at)::BIGINT as applied_at FROM _fluent_migrations ORDER BY name",
@@ -120,7 +113,6 @@ pub const MigrationRunner = struct {
         return try applied.toOwnedSlice(self.allocator);
     }
 
-    /// Scan migrations directory for migration files
     pub fn scanMigrations(self: *Self) ![]MigrationInfo {
         var dir = std.fs.cwd().openDir(self.migrations_dir, .{ .iterate = true }) catch |err| {
             if (err == error.FileNotFound) {
@@ -167,7 +159,6 @@ pub const MigrationRunner = struct {
         return try migrations.toOwnedSlice(self.allocator);
     }
 
-    /// Calculate checksum of a file
     pub fn calculateChecksum(self: *Self, path: []const u8) ![]const u8 {
         const file = try std.fs.cwd().openFile(path, .{});
         defer file.close();
@@ -184,7 +175,7 @@ pub const MigrationRunner = struct {
         return try self.allocator.dupe(u8, &hex);
     }
 
-    /// Run pending migrations
+    // Run pending migrations
     pub fn migrate(self: *Self) !MigrateResult {
         try self.ensureMigrationsTable();
 
@@ -291,7 +282,7 @@ pub const MigrationRunner = struct {
         return result;
     }
 
-    /// Get migration status
+    // Get migration status
     pub fn status(self: *Self) !MigrationStatus {
         try self.ensureMigrationsTable();
 
@@ -321,7 +312,7 @@ pub const MigrationRunner = struct {
         };
     }
 
-    /// Rollback the last migration
+    // Rollback the last migration
     pub fn rollback(self: *Self) !?[]const u8 {
         try self.ensureMigrationsTable();
 
@@ -379,7 +370,6 @@ pub const MigrationRunner = struct {
     }
 };
 
-/// Result of a migration run
 pub const MigrateResult = struct {
     applied_count: usize,
     skipped_count: usize,
@@ -394,7 +384,6 @@ pub const MigrateResult = struct {
     }
 };
 
-/// Migration status info
 pub const MigrationStatus = struct {
     applied: []AppliedMigration,
     pending: [][]const u8,
@@ -421,7 +410,6 @@ pub const MigrationStatus = struct {
     }
 };
 
-/// CLI entry point for migration runner
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
