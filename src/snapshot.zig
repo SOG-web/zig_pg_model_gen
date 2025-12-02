@@ -281,7 +281,6 @@ test "serialize and deserialize snapshot" {
 
     // Serialize to JSON
     const json = try toJson(allocator, db_snapshot);
-    std.debug.print("JSON: {s}\n", .{json});
     defer allocator.free(json);
 
     // Deserialize from JSON
