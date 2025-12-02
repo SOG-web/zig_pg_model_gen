@@ -1,0 +1,14 @@
+-- Table: categories
+CREATE TABLE IF NOT EXISTS categories (
+  id UUID PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  description TEXT,
+  color TEXT DEFAULT '#3B82F6',
+  sort_order INT NOT NULL DEFAULT 0,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_slug ON categories (slug);

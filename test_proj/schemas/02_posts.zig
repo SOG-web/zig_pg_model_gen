@@ -69,21 +69,19 @@ pub fn build(t: *TableSchema) void {
         .update_input = false,
     });
 
-    t.string(.{
-        .name = "altered",
-        .not_null = false,
-        .create_input = .excluded,
-        .update_input = false,
-    });
-
-    // Relationship: post belongs to user (many-to-one)
-    t.foreign(.{
+    // Relationship: post belongs to user (many-to-one) - using convenience method!
+    t.belongsTo(.{
         .name = "post_author",
         .column = "user_id",
         .references_table = "users",
-        .references_column = "id",
-        .relationship_type = .many_to_one,
         .on_delete = .cascade,
+    });
+
+    // One-to-many: Post has many comments
+    t.hasMany(.{
+        .name = "post_comments",
+        .foreign_table = "comments",
+        .foreign_column = "post_id",
     });
 
     // Add composite index on user_id and created_at for efficient queries
@@ -93,12 +91,5 @@ pub fn build(t: *TableSchema) void {
             .columns = &.{ "user_id", "created_at" },
             .unique = false,
         },
-    });
-
-    t.alterField(.{
-        .name = "altered",
-        .type = .f64,
-        .create_input = .optional,
-        .update_input = true,
     });
 }

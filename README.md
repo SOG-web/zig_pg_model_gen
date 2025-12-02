@@ -24,7 +24,7 @@ A schema-first, type-safe ORM for Zig with PostgreSQL support. Define your datab
 ### 1. Add FluentORM to your project
 
 ```bash
-zig fetch --save git+https://github.com/SOG-web/fluentorm#main
+zig fetch --save git+https://github.com/SOG-web/fluentorm.zig#main
 ```
 
 This adds FluentORM to your `build.zig.zon`:
@@ -32,7 +32,7 @@ This adds FluentORM to your `build.zig.zon`:
 ```zig
 .dependencies = .{
     .fluentorm = .{
-        .url = "git+https://github.com/SOG-web/fluentorm#main",
+        .url = "git+https://github.com/SOG-web/fluentorm.zig#main",
         .hash = "<hash>",
     },
 },
@@ -174,13 +174,11 @@ pub fn build(t: *TableSchema) void {
         .auto_generated = true,
     });
 
-    // Define relationship
-    t.foreign(.{
+    // Define relationship using convenience method
+    t.belongsTo(.{
         .name = "post_author",
         .column = "user_id",
         .references_table = "users",
-        .references_column = "id",
-        .relationship_type = .many_to_one,
         .on_delete = .cascade,
     });
 }
@@ -216,8 +214,8 @@ const std = @import("std");
 const pg = @import("pg");
 const models = @import("models/generated/root.zig");
 
-const User = models.User;
-const Post = models.Post;
+const Users = models.Users;
+const Posts = models.Posts;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -240,7 +238,7 @@ pub fn main() !void {
     defer pool.deinit();
 
     // Create a user
-    const user_id = try User.insert(&pool, allocator, .{
+    const user_id = try Users.insert(&pool, allocator, .{
         .email = "alice@example.com",
         .name = "Alice",
         .password_hash = "hashed_password",
@@ -248,7 +246,7 @@ pub fn main() !void {
     defer allocator.free(user_id);
 
     // Query users
-    var query = User.query();
+    var query = Users.query();
     defer query.deinit();
 
     const users = try query
@@ -256,12 +254,12 @@ pub fn main() !void {
         .fetch(&pool, allocator, .{"alice@example.com"});
     defer allocator.free(users);
 
-    // Get user with relationship
-    if (try User.findById(&pool, allocator, user_id)) |user| {
+    // Get user with hasMany relationship
+    if (try Users.findById(&pool, allocator, user_id)) |user| {
         defer allocator.free(user);
 
-        // Fetch related posts
-        const posts = try user.fetchPostAuthor(&pool, allocator);
+        // Fetch related posts using hasMany
+        const posts = try user.fetchPosts(&pool, allocator);
         defer allocator.free(posts);
     }
 }
@@ -315,10 +313,32 @@ Common options for all field types:
 
 ## Relationship Types
 
-- `many_to_one` - This table has a foreign key to another table
-- `one_to_many` - Another table has foreign keys pointing to this table
-- `one_to_one` - One-to-one relationship
-- `many_to_many` - Many-to-many through junction table (manual setup required)
+FluentORM provides convenience methods for defining relationships:
+
+| Method           | Relationship | Description                                  |
+| ---------------- | ------------ | -------------------------------------------- |
+| `t.belongsTo()`  | Many-to-One  | This table has a FK to another table         |
+| `t.hasOne()`     | One-to-One   | This table has a unique FK to another table  |
+| `t.hasMany()`    | One-to-Many  | Another table has FKs pointing to this table |
+| `t.manyToMany()` | Many-to-Many | Junction table relationship                  |
+| `t.foreign()`    | Any          | Generic method with full control             |
+
+```zig
+// Post belongs to User
+t.belongsTo(.{
+    .name = "post_author",
+    .column = "user_id",
+    .references_table = "users",
+    .on_delete = .cascade,
+});
+
+// User has many Posts
+t.hasMany(.{
+    .name = "user_posts",
+    .foreign_table = "posts",
+    .foreign_column = "user_id",
+});
+```
 
 ## Requirements
 

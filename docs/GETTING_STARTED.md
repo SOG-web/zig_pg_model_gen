@@ -180,13 +180,15 @@ Create your database:
 createdb my_app_db
 ```
 
-Run the generated migration:
+Run the generated migrations:
 
 ```bash
-psql -U postgres -d my_app_db -f migrations/users.sql
-```
+# First, create the tables
+psql -U postgres -d my_app_db -f migrations/tables/01_users.sql
 
-Or use the programmatic approach (see step 7).
+# Then apply foreign key constraints (if any)
+psql -U postgres -d my_app_db -f migrations/constraints/*_fk.sql
+```
 
 ## Step 7: Write Your First Application
 
@@ -217,12 +219,8 @@ pub fn main() !void {
     });
     defer pool.deinit();
 
-    // Create the table (first time only)
-    try models.User.createTable(&pool);
-    std.debug.print("Table created successfully!\n", .{});
-
     // Insert a user
-    const user_id = try models.User.insert(&pool, allocator, .{
+    const user_id = try models.Users.insert(&pool, allocator, .{
         .email = "alice@example.com",
         .name = "Alice",
         .password_hash = "hashed_password_here",
@@ -231,13 +229,12 @@ pub fn main() !void {
     std.debug.print("Created user with ID: {s}\n", .{user_id});
 
     // Find the user by ID
-    if (try models.User.findById(&pool, allocator, user_id)) |user| {
-        defer allocator.free(user);
+    if (try models.Users.findById(&pool, allocator, user_id)) |user| {
         std.debug.print("Found user: {s} ({s})\n", .{ user.name, user.email });
     }
 
     // Query users
-    var query = models.User.query();
+    var query = models.Users.query();
     defer query.deinit();
 
     const users = try query
@@ -248,13 +245,13 @@ pub fn main() !void {
     std.debug.print("Found {d} user(s)\n", .{users.len});
 
     // Update the user
-    try models.User.update(&pool, user_id, .{
+    try models.Users.update(&pool, user_id, .{
         .name = "Alice Smith",
     });
     std.debug.print("User updated!\n", .{});
 
     // Delete the user (soft delete)
-    try models.User.softDelete(&pool, user_id);
+    try models.Users.softDelete(&pool, user_id);
     std.debug.print("User soft deleted!\n", .{});
 }
 ```
@@ -268,7 +265,6 @@ zig build run
 Expected output:
 
 ```
-Table created successfully!
 Created user with ID: 550e8400-e29b-41d4-a716-446655440000
 Found user: Alice (alice@example.com)
 Found 1 user(s)
@@ -308,13 +304,29 @@ pub fn build(t: *TableSchema) void {
     });
 
     // Relationship: post belongs to user
-    t.foreign(.{
+    t.belongsTo(.{
         .name = "post_author",
         .column = "user_id",
         .references_table = "users",
-        .references_column = "id",
-        .relationship_type = .many_to_one,
         .on_delete = .cascade,
+    });
+}
+```
+
+And update `schemas/01_users.zig` to add hasMany:
+
+```zig
+const fluentorm = @import("fluentorm");
+const TableSchema = fluentorm.TableSchema;
+
+pub fn build(t: *TableSchema) void {
+    // ... existing fields ...
+
+    // One-to-many: User has many posts
+    t.hasMany(.{
+        .name = "user_posts",
+        .foreign_table = "posts",
+        .foreign_column = "user_id",
     });
 }
 ```
@@ -329,7 +341,20 @@ zig build generate-models
 Use the relationship:
 
 ```zig
-const post = (try models.Post.findById(&pool, allocator, post_id)).?;
+// Using hasMany on Users
+const user = (try models.Users.findById(&pool, allocator, user_id)).?;
+defer allocator.free(user);
+
+// Fetch all posts by this user
+const posts = try user.fetchPosts(&pool, allocator);
+defer allocator.free(posts);
+
+for (posts) |p| {
+    std.debug.print("Post: {s}\n", .{p.title});
+}
+
+// Using belongsTo on Posts
+const post = (try models.Posts.findById(&pool, allocator, post_id)).?;
 defer allocator.free(post);
 
 // Fetch the author
@@ -367,13 +392,17 @@ psql -U postgres -d my_app_db
 
 ### Error: Table already exists
 
-**Solution**: The ORM uses `CREATE TABLE IF NOT EXISTS`, but if you need to recreate:
+**Solution**: Drop the table and run migrations again:
 
 ```sql
 DROP TABLE users CASCADE;
 ```
 
-Then regenerate and run migrations again.
+Then run the migrations:
+
+```bash
+psql -U postgres -d my_app_db -f migrations/tables/01_users.sql
+```
 
 ## Project Structure
 
@@ -399,8 +428,11 @@ my-app/
 │           ├── posts.zig
 │           └── root.zig
 └── migrations/
-    ├── users.sql
-    └── posts.sql
+    ├── tables/
+    │   ├── 01_users.sql
+    │   └── 02_posts.sql
+    └── constraints/
+        └── 02_posts_fk.sql
 ```
 
 ## Summary

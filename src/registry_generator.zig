@@ -66,6 +66,21 @@ pub fn generateRegistry(schemas_dir: []const u8, output_file: []const u8) !void 
     }
     try registry.appendSlice(allocator, "};\n\n");
 
+    // Generate file prefixes array for SQL migration ordering
+    try registry.appendSlice(allocator, "/// File prefixes for SQL migration ordering (e.g., \"01\", \"02\")\n");
+    try registry.appendSlice(allocator, "pub const file_prefixes = [_][]const u8{\n");
+    for (schemas.items) |schema| {
+        // Extract the prefix (e.g., "01" from "01_users")
+        const prefix = schema.filename[0..2];
+        try registry.writer(allocator).print("    \"{s}\",\n", .{prefix});
+    }
+    try registry.appendSlice(allocator, "};\n\n");
+
+    try registry.appendSlice(allocator, "/// Get file prefixes for SQL migration ordering\n");
+    try registry.appendSlice(allocator, "pub fn getFilePrefixes() []const []const u8 {\n");
+    try registry.appendSlice(allocator, "    return &file_prefixes;\n");
+    try registry.appendSlice(allocator, "}\n\n");
+
     try registry.appendSlice(allocator,
         \\pub fn getAllSchemas(allocator: std.mem.Allocator) ![]TableSchema {
         \\    var result = std.ArrayList(TableSchema){};

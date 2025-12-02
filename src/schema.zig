@@ -209,6 +209,16 @@ pub const Relationship = struct {
     on_update: OnUpdateAction = .no_action,
 };
 
+/// HasMany relationship definition for one-to-many relationships defined in the parent table.
+/// This is metadata only - no SQL constraint is generated (the FK is in the child table).
+/// Used to generate helper methods like `fetchUserPosts()` on the parent model.
+pub const HasManyRelationship = struct {
+    name: []const u8, // e.g., "user_posts"
+    foreign_table: []const u8, // e.g., "posts"
+    foreign_column: []const u8, // e.g., "user_id" (the FK column in foreign table)
+    local_column: []const u8 = "id", // e.g., "id" (usually the PK of this table)
+};
+
 pub const Schema = struct {
     table_name: []const u8,
     struct_name: []const u8,

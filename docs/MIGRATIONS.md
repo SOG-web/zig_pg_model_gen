@@ -4,7 +4,9 @@ This guide explains how to manage database schema changes and migrations using F
 
 ## Overview
 
-FluentORM automatically generates SQL migration files based on your TableSchema definitions. These migration files can be executed manually or integrated into your deployment process.
+FluentORM automatically generates SQL migration files based on your TableSchema definitions. These migration files must be executed manually using `psql` or integrated into your deployment process.
+
+> **Note**: FluentORM does not currently include a built-in migration runner. You must execute migrations manually or create your own runner script.
 
 ## Migration Workflow
 
@@ -33,145 +35,68 @@ zig build generate
 zig build generate-models
 ```
 
-This creates SQL migration files in the `migrations/` directory:
+This creates SQL migration files in the `migrations/` directory with a specific structure:
 
 ```
 migrations/
-├── users.sql
-├── posts.sql
-└── comments.sql
+├── tables/
+│   ├── 01_users.sql
+│   ├── 02_posts.sql
+│   └── 03_comments.sql
+└── constraints/
+    ├── 02_posts_fk.sql
+    └── 03_comments_fk.sql
 ```
+
+- **tables/**: CREATE TABLE statements (run first)
+- **constraints/**: Foreign key constraints (run after all tables exist)
 
 ### 3. Execute Migrations
 
-You have several options for executing migrations:
-
-#### Option A: Manual Execution
-
-Use `psql` or your favorite PostgreSQL client:
+Use `psql` or your favorite PostgreSQL client to run migrations in order:
 
 ```bash
-psql -U postgres -d mydb -f migrations/users.sql
-psql -U postgres -d mydb -f migrations/posts.sql
-psql -U postgres -d mydb -f migrations/comments.sql
+# First: Create all tables
+psql -U postgres -d mydb -f migrations/tables/01_users.sql
+psql -U postgres -d mydb -f migrations/tables/02_posts.sql
+psql -U postgres -d mydb -f migrations/tables/03_comments.sql
+
+# Then: Add foreign key constraints
+psql -U postgres -d mydb -f migrations/constraints/02_posts_fk.sql
+psql -U postgres -d mydb -f migrations/constraints/03_comments_fk.sql
 ```
 
-#### Option B: Programmatic Execution
-
-Use the generated model's `createTable()` method:
-
-```zig
-const std = @import("std");
-const pg = @import("pg");
-const models = @import("models/generated/root.zig");
-
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    var pool = try pg.Pool.init(allocator, .{
-        .size = 5,
-        .connect = .{ .host = "localhost", .port = 5432 },
-        .auth = .{ .username = "postgres", .password = "password", .database = "mydb" },
-    });
-    defer pool.deinit();
-
-    // Run migrations in order
-    try models.User.createTable(&pool);
-    try models.Post.createTable(&pool);
-    try models.Comment.createTable(&pool);
-}
-```
-
-#### Option C: Migration Runner Script
-
-Create a dedicated migration script:
-
-```zig
-// src/migrate.zig
-const std = @import("std");
-const pg = @import("pg");
-const models = @import("models/generated/root.zig");
-
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    // Read connection info from environment
-    const db_url = std.process.getEnvVarOwned(
-        allocator,
-        "DATABASE_URL",
-    ) catch "postgresql://postgres:password@localhost:5432/mydb";
-    defer allocator.free(db_url);
-
-    var pool = try pg.Pool.init(allocator, .{
-        .size = 5,
-        .connect = .{ .host = "localhost", .port = 5432 },
-        .auth = .{ .username = "postgres", .password = "password", .database = "mydb" },
-    });
-    defer pool.deinit();
-
-    std.debug.print("Running migrations...\n", .{});
-
-    // Execute in dependency order
-    inline for (.{
-        models.User,
-        models.Post,
-        models.Comment,
-    }) |Model| {
-        const table_name = Model.tableName();
-        std.debug.print("Creating table: {s}\n", .{table_name});
-        try Model.createTable(&pool);
-    }
-
-    std.debug.print("Migrations complete!\n", .{});
-}
-```
-
-Add to `build.zig`:
-
-```zig
-const migrate = b.addExecutable(.{
-    .name = "migrate",
-    .root_module = b.createModule(.{
-        .root_source_file = b.path("src/migrate.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{
-            .{ .name = "fluentorm", .module = fluentorm },
-            .{ .name = "pg", .module = pg },
-        },
-    }),
-});
-b.installArtifact(migrate);
-
-const migrate_step = b.step("migrate", "Run database migrations");
-migrate_step.dependOn(&b.addRunArtifact(migrate).step);
-```
-
-Execute:
+Or run all migrations with a shell script:
 
 ```bash
-zig build migrate
+#!/bin/bash
+DB_NAME="mydb"
+DB_USER="postgres"
+
+# Run table migrations in order
+for f in migrations/tables/*.sql; do
+    echo "Running $f..."
+    psql -U $DB_USER -d $DB_NAME -f "$f"
+done
+
+# Run constraint migrations in order
+for f in migrations/constraints/*.sql; do
+    echo "Running $f..."
+    psql -U $DB_USER -d $DB_NAME -f "$f"
+done
+
+echo "Migrations complete!"
 ```
 
 ## Generated SQL Structure
 
-Each generated SQL file includes:
+### Table Migrations (migrations/tables/)
 
-### 1. UUID Extension
+Each table migration includes:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-```
 
-Enables `gen_random_uuid()` for UUID generation.
-
-### 2. Table Creation
-
-```sql
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email TEXT NOT NULL UNIQUE,
@@ -182,128 +107,172 @@ CREATE TABLE IF NOT EXISTS users (
 );
 ```
 
-Includes all fields with proper types, constraints, and defaults.
+### Constraint Migrations (migrations/constraints/)
 
-### 3. Foreign Key Constraints
+Foreign key constraints are generated separately:
 
 ```sql
 ALTER TABLE posts
-ADD CONSTRAINT fk_post_author
+ADD CONSTRAINT fk_posts_user_id
 FOREIGN KEY (user_id) REFERENCES users(id)
 ON DELETE CASCADE;
 ```
 
-Enforces referential integrity between tables.
-
-### 4. Indexes
-
-```sql
-CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
-```
+This separation ensures tables exist before constraints reference them.
 
 ## Schema Changes
 
-When you modify a schema, FluentORM regenerates the SQL files. However, **existing migrations are not automatically altered**. You must handle schema changes manually.
+FluentORM follows a **schema-first approach**. When you need to modify your database structure, you should **always update your schema files** and regenerate models. Never manually edit SQL files or run ad-hoc ALTER statements, as this will cause your generated models to be out of sync with your database.
 
-### Adding a Field
+### The Schema-First Workflow
 
-1. Update your schema file:
+1. **Modify your schema file** (`schemas/XX_tablename.zig`)
+2. **Regenerate models**: `zig build generate && zig build generate-models`
+3. **Apply the regenerated migrations** to your database
+
+### Adding a New Field
+
+Add the new field to your schema file:
 
 ```zig
 // schemas/01_users.zig
 pub fn build(t: *TableSchema) void {
     // ... existing fields ...
 
-    // New field
+    // Add a new field
     t.string(.{
         .name = "phone",
         .not_null = false,
+        .create_input = .optional,
     });
 }
 ```
 
-2. Regenerate:
+Regenerate:
 
 ```bash
 zig build generate
 zig build generate-models
 ```
 
-3. Create an ALTER TABLE migration:
+Then re-run the generated table migration to apply the changes.
 
-```sql
--- migrations/001_add_phone_to_users.sql
-ALTER TABLE users ADD COLUMN phone TEXT;
+### Modifying an Existing Field with `alterField()`
+
+Use the `alterField()` method to modify properties of an existing field. This is useful when you want to change constraints, input modes, or other properties without redefining the entire field.
+
+```zig
+// schemas/01_users.zig
+pub fn build(t: *TableSchema) void {
+    // Original field definition
+    t.string(.{
+        .name = "bio",
+        .not_null = true,
+    });
+
+    // Later, alter it to be optional and redacted
+    t.alterField(.{
+        .name = "bio",
+        .not_null = false,
+        .create_input = .optional,
+        .redacted = true,
+    });
+}
 ```
 
-4. Execute:
+**`alterField()` Options**:
 
-```bash
-psql -U postgres -d mydb -f migrations/001_add_phone_to_users.sql
-```
+| Option               | Type                | Description                          |
+| -------------------- | ------------------- | ------------------------------------ |
+| `name`               | `[]const u8`        | **Required**: Name of field to alter |
+| `type`               | `?FieldType`        | Change the field type                |
+| `primary_key`        | `?bool`             | Change primary key status            |
+| `unique`             | `?bool`             | Change unique constraint             |
+| `not_null`           | `?bool`             | Change NOT NULL constraint           |
+| `create_input`       | `?InputMode`        | Change create input mode             |
+| `update_input`       | `?bool`             | Change update input inclusion        |
+| `redacted`           | `?bool`             | Change JSON response redaction       |
+| `default_value`      | `?[]const u8`       | Change SQL default value             |
+| `auto_generated`     | `?bool`             | Change auto-generation status        |
+| `auto_generate_type` | `?AutoGenerateType` | Change auto-generation type          |
 
-### Renaming a Field
+Only specify the properties you want to change; others retain their original values.
 
-1. Update your schema with the new field name
-2. Regenerate models
-3. Create a migration:
+### Altering Multiple Fields
 
-```sql
--- migrations/002_rename_name_to_full_name.sql
-ALTER TABLE users RENAME COLUMN name TO full_name;
+Use `alterFields()` to modify multiple fields at once:
+
+```zig
+t.alterFields(&.{
+    .{ .name = "email", .unique = true },
+    .{ .name = "bio", .not_null = false, .redacted = true },
+    .{ .name = "password_hash", .redacted = true },
+});
 ```
 
 ### Removing a Field
 
-1. Remove from schema
-2. Regenerate models
-3. Create a migration:
+Remove the field definition from your schema file, then regenerate:
 
-```sql
--- migrations/003_remove_phone_from_users.sql
-ALTER TABLE users DROP COLUMN phone;
+```zig
+// schemas/01_users.zig
+pub fn build(t: *TableSchema) void {
+    // Remove the field you no longer need by deleting its definition
+    // t.string(.{ .name = "phone" }); // <-- Delete this line
+}
 ```
 
-**Warning**: Dropping columns is destructive and cannot be undone.
+Then regenerate and re-run the migrations.
+
+### Renaming a Field
+
+> **Coming Soon**: Field renaming via `t.renameField()` is planned for a future release.
+
+Currently, FluentORM does not support direct field renaming. This feature is on the roadmap.
+
+### Important: Keep Schema and Database in Sync
+
+⚠️ **Never manually edit the generated SQL files** in `migrations/tables/` or `migrations/constraints/`. These are regenerated each time you run `zig build generate-models`.
+
+⚠️ **Never run ad-hoc SQL statements** against your database. All schema changes should go through the TableSchema builder.
+
+✅ **Always modify your schema files first**, then regenerate models and apply migrations.
 
 ## Migration Best Practices
 
 ### 1. Version Control
 
-Commit all migration files to version control:
+Commit your schema files to version control. The generated migration files can be regenerated:
 
 ```bash
-git add migrations/
-git commit -m "Add users and posts migrations"
+git add schemas/
+git commit -m "Add phone field to users schema"
 ```
 
-### 2. Sequential Numbering
+### 2. Schema-First Always
 
-Use a consistent numbering scheme for manual migrations:
+Never bypass the schema. All database structure should be defined in your `schemas/` directory:
 
 ```
-migrations/
-├── users.sql                  # Generated
-├── posts.sql                  # Generated
-├── 001_add_phone.sql         # Manual
-├── 002_add_indexes.sql       # Manual
-└── 003_alter_constraints.sql # Manual
+schemas/
+├── 01_users.zig       # Users table definition
+├── 02_posts.zig       # Posts table definition
+├── 03_comments.zig    # Comments table definition
+├── registry.zig       # Auto-generated
+└── runner.zig         # Auto-generated
 ```
 
-### 3. Idempotent Migrations
+### 3. Dependency Order
 
-Always use `IF NOT EXISTS` and `IF EXISTS` clauses:
+Use numbered prefixes to ensure correct migration order:
 
-```sql
-CREATE TABLE IF NOT EXISTS users (...);
-DROP TABLE IF EXISTS old_table;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
-```
+- `01_users.zig` - No dependencies
+- `02_posts.zig` - Depends on users (has `user_id` FK)
+- `03_comments.zig` - Depends on users and posts
 
 ### 4. Backup Before Migrations
 
-Always backup your database before running migrations:
+Always backup your database before applying schema changes:
 
 ```bash
 pg_dump -U postgres mydb > backup_$(date +%Y%m%d_%H%M%S).sql
@@ -317,100 +286,44 @@ Never run untested migrations directly in production:
 2. Test in staging environment
 3. Deploy to production
 
-### 6. Rollback Plan
+### 6. Use `alterField()` for Modifications
 
-Create rollback migrations for destructive changes:
-
-```sql
--- migrations/004_add_status.sql
-ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active';
-
--- migrations/004_rollback_add_status.sql
-ALTER TABLE users DROP COLUMN status;
-```
-
-## DDL Operations
-
-FluentORM provides these DDL methods on all generated models:
-
-### Create Table
+When changing field properties, use `alterField()` instead of modifying the original field definition. This makes changes explicit and trackable:
 
 ```zig
-try User.createTable(&pool);
+// Original
+t.string(.{ .name = "bio" });
+
+// Later modification - clear intent
+t.alterField(.{ .name = "bio", .not_null = false, .redacted = true });
 ```
 
-Executes `CREATE TABLE IF NOT EXISTS ...`
+## Available DDL Operations
 
-### Create Indexes
-
-```zig
-try User.createIndexes(&pool);
-```
-
-Creates all indexes defined in the schema.
+Generated models include these DDL methods from the BaseModel:
 
 ### Check Table Existence
 
 ```zig
-const exists = try User.tableExists(&pool);
+const exists = try Users.tableExists(&pool);
+if (exists) {
+    std.debug.print("Table exists\n", .{});
+}
 ```
 
-Returns `true` if the table exists.
-
-### Drop Table
-
-```zig
-try User.dropTable(&pool);
-```
-
-Executes `DROP TABLE IF EXISTS users CASCADE`.
-
-**Warning**: This permanently deletes all data.
+Returns `true` if the table exists in the database.
 
 ### Truncate Table
 
 ```zig
-try User.truncate(&pool);
+try Users.truncate(&pool);
 ```
 
 Removes all rows but keeps the table structure.
 
-## CI/CD Integration
+**Warning**: This permanently deletes all data in the table.
 
-### GitHub Actions Example
-
-```yaml
-name: Database Migrations
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  migrate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Setup PostgreSQL
-        uses: harmon758/postgresql-action@v1
-        with:
-          postgresql version: "14"
-          postgresql db: "testdb"
-          postgresql user: "postgres"
-          postgresql password: "postgres"
-
-      - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.15.1
-
-      - name: Run migrations
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/testdb
-        run: |
-          zig build migrate
-```
+> **Note**: `createTable()`, `dropTable()`, and `createIndexes()` methods are not currently available. Use the generated SQL files or `psql` commands instead.
 
 ## Troubleshooting
 
@@ -424,17 +337,13 @@ jobs:
 
 **Problem**: Trying to add a column that already exists.
 
-**Solution**: Use `ADD COLUMN IF NOT EXISTS` in manual migrations.
+**Solution**: The generated migrations use `CREATE TABLE IF NOT EXISTS`. If you need to modify an existing table, update your schema and regenerate.
 
 ### UUID Extension Error
 
 **Problem**: `gen_random_uuid()` function not found.
 
-**Solution**: Ensure the UUID extension is installed:
-
-```sql
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-```
+**Solution**: The generated migrations include `CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`. Ensure the migration file is executed properly.
 
 ### Connection Refused
 

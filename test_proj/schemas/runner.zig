@@ -21,13 +21,18 @@ pub fn main() !void {
     try std.fs.cwd().makePath(output_dir);
     try std.fs.cwd().makePath(sql_output_dir);
 
+    // Get file prefixes from registry
+    const prefixes = registry.getFilePrefixes();
 
-    for (schemas) |schema| {
+    for (schemas, 0..) |schema, i| {
         // Use schema name as the source file name for comments
         const schema_file = try std.fmt.allocPrint(allocator, "{s}.zig", .{schema.name});
         defer allocator.free(schema_file);
 
-        try sql_generator.writeSchemaToFile(allocator, schema, sql_output_dir);
+        // Get the file prefix (e.g., "01", "02") for ordering migrations
+        const file_prefix = prefixes[i];
+
+        try sql_generator.writeSchemaToFile(allocator, schema, sql_output_dir, file_prefix);
         try model_generator.generateModel(allocator, schema, schema_file, output_dir);
     }
 

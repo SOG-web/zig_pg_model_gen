@@ -30,6 +30,7 @@ fn generateFieldSQL(allocator: std.mem.Allocator, sql: *std.ArrayList(u8), field
     }
 }
 
+/// Generate CREATE TABLE SQL without foreign key constraints
 pub fn generateCreateTableSQL(allocator: std.mem.Allocator, table: TableSchema) ![]u8 {
     var sql = std.ArrayList(u8){};
     errdefer sql.deinit(allocator);
@@ -37,41 +38,22 @@ pub fn generateCreateTableSQL(allocator: std.mem.Allocator, table: TableSchema) 
     try sql.print(allocator, "-- Table: {s}\n", .{table.name});
     try sql.print(allocator, "CREATE TABLE IF NOT EXISTS {s} (\n", .{table.name});
 
-    // Add fields
+    // Add fields only (no foreign keys in CREATE TABLE)
     for (table.fields.items, 0..) |field, i| {
         try generateFieldSQL(allocator, &sql, field, false);
 
-        if (i < table.fields.items.len - 1 or table.relationships.items.len > 0) {
+        if (i < table.fields.items.len - 1) {
             try sql.appendSlice(allocator, ",\n");
         } else {
             try sql.appendSlice(allocator, "\n");
         }
     }
 
-    // Add foreign keys
-    for (table.relationships.items, 0..) |rel, i| {
-        try sql.print(allocator, "  CONSTRAINT fk_{s}_{s} FOREIGN KEY ({s}) REFERENCES {s}({s})", .{
-            table.name,
-            rel.name,
-            rel.column,
-            rel.references_table,
-            rel.references_column,
-        });
-
-        try sql.print(allocator, " ON DELETE {s}", .{rel.on_delete.toSQL()});
-        try sql.print(allocator, " ON UPDATE {s}", .{rel.on_update.toSQL()});
-
-        if (i < table.relationships.items.len - 1) {
-            try sql.appendSlice(allocator, ",\n");
-        } else {
-            try sql.appendSlice(allocator, "\n");
-        }
-    }
-
-    try sql.appendSlice(allocator, ");\n\n");
+    try sql.appendSlice(allocator, ");\n");
 
     // Add indexes
     for (table.indexes.items) |idx| {
+        try sql.appendSlice(allocator, "\n");
         if (idx.unique) {
             try sql.print(allocator, "CREATE UNIQUE INDEX IF NOT EXISTS {s} ON {s} (", .{ idx.name, table.name });
         } else {
@@ -85,33 +67,124 @@ pub fn generateCreateTableSQL(allocator: std.mem.Allocator, table: TableSchema) 
             }
         }
 
-        try sql.appendSlice(allocator, ");\n");
+        try sql.appendSlice(allocator, ");");
     }
 
     // Add drop index
     for (table.drop_indexes.items) |idx| {
-        try sql.print(allocator, "DROP INDEX IF EXISTS {s};\n", .{idx});
+        try sql.appendSlice(allocator, "\n");
+        try sql.print(allocator, "DROP INDEX IF EXISTS {s};", .{idx});
     }
 
     // Add alter table
     for (table.alters.items) |alter| {
+        try sql.appendSlice(allocator, "\n");
         try sql.print(allocator, "ALTER TABLE {s} ", .{table.name});
         try generateFieldSQL(allocator, &sql, alter, true);
-        try sql.appendSlice(allocator, ";\n");
+        try sql.appendSlice(allocator, ";");
     }
 
     return sql.toOwnedSlice(allocator);
 }
 
-pub fn writeSchemaToFile(allocator: std.mem.Allocator, table: TableSchema, output_dir: []const u8) !void {
+/// Generate ALTER TABLE statements for foreign key constraints
+pub fn generateConstraintsSQL(allocator: std.mem.Allocator, table: TableSchema) !?[]u8 {
+    // Only generate if there are relationships that need FK constraints
+    // (many_to_one and one_to_one create FK constraints, one_to_many does not)
+    var fk_count: usize = 0;
+    for (table.relationships.items) |rel| {
+        if (rel.relationship_type == .many_to_one or rel.relationship_type == .one_to_one) {
+            fk_count += 1;
+        }
+    }
+
+    if (fk_count == 0) {
+        return null;
+    }
+
+    var sql = std.ArrayList(u8){};
+    errdefer sql.deinit(allocator);
+
+    try sql.print(allocator, "-- Foreign Key Constraints for: {s}\n", .{table.name});
+
+    var first = true;
+    for (table.relationships.items) |rel| {
+        // Only many_to_one and one_to_one relationships create FK constraints
+        if (rel.relationship_type != .many_to_one and rel.relationship_type != .one_to_one) {
+            continue;
+        }
+
+        if (!first) {
+            try sql.appendSlice(allocator, "\n");
+        }
+        first = false;
+
+        try sql.print(allocator, "ALTER TABLE {s} ADD CONSTRAINT fk_{s}_{s}\n", .{
+            table.name,
+            table.name,
+            rel.name,
+        });
+        try sql.print(allocator, "  FOREIGN KEY ({s}) REFERENCES {s}({s})\n", .{
+            rel.column,
+            rel.references_table,
+            rel.references_column,
+        });
+        try sql.print(allocator, "  ON DELETE {s} ON UPDATE {s};", .{
+            rel.on_delete.toSQL(),
+            rel.on_update.toSQL(),
+        });
+    }
+
+    const result = try sql.toOwnedSlice(allocator);
+    return result;
+}
+
+/// Write table creation SQL to tables/ subdirectory
+pub fn writeTableToFile(allocator: std.mem.Allocator, table: TableSchema, output_dir: []const u8, file_prefix: []const u8) !void {
     const sql = try generateCreateTableSQL(allocator, table);
     defer allocator.free(sql);
 
-    const filename = try std.fmt.allocPrint(allocator, "{s}/{s}.sql", .{ output_dir, table.name });
+    // Create tables subdirectory
+    const tables_dir = try std.fmt.allocPrint(allocator, "{s}/tables", .{output_dir});
+    defer allocator.free(tables_dir);
+
+    std.fs.cwd().makePath(tables_dir) catch |err| {
+        if (err != error.PathAlreadyExists) return err;
+    };
+
+    const filename = try std.fmt.allocPrint(allocator, "{s}/{s}_{s}.sql", .{ tables_dir, file_prefix, table.name });
     defer allocator.free(filename);
 
     const file = try std.fs.cwd().createFile(filename, .{});
     defer file.close();
 
     try file.writeAll(sql);
+}
+
+/// Write foreign key constraints SQL to constraints/ subdirectory
+pub fn writeConstraintsToFile(allocator: std.mem.Allocator, table: TableSchema, output_dir: []const u8, file_prefix: []const u8) !void {
+    const sql = try generateConstraintsSQL(allocator, table) orelse return;
+    defer allocator.free(sql);
+
+    // Create constraints subdirectory
+    const constraints_dir = try std.fmt.allocPrint(allocator, "{s}/constraints", .{output_dir});
+    defer allocator.free(constraints_dir);
+
+    std.fs.cwd().makePath(constraints_dir) catch |err| {
+        if (err != error.PathAlreadyExists) return err;
+    };
+
+    const filename = try std.fmt.allocPrint(allocator, "{s}/{s}_{s}_fk.sql", .{ constraints_dir, file_prefix, table.name });
+    defer allocator.free(filename);
+
+    const file = try std.fs.cwd().createFile(filename, .{});
+    defer file.close();
+
+    try file.writeAll(sql);
+}
+
+/// Write both table and constraints SQL files
+pub fn writeSchemaToFile(allocator: std.mem.Allocator, table: TableSchema, output_dir: []const u8, file_prefix: []const u8) !void {
+    try writeTableToFile(allocator, table, output_dir, file_prefix);
+    try writeConstraintsToFile(allocator, table, output_dir, file_prefix);
 }

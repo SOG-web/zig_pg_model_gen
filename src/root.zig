@@ -7,6 +7,7 @@ pub const InputMode = @import("schema.zig").InputMode;
 pub const model_generator = @import("model_generator.zig");
 pub const OnDeleteAction = @import("schema.zig").OnDeleteAction;
 pub const OnUpdateAction = @import("schema.zig").OnUpdateAction;
+pub const query = @import("query.zig");
 pub const Relationship = @import("schema.zig").Relationship;
 pub const RelationshipType = @import("schema.zig").RelationshipType;
 pub const Schema = @import("schema.zig").Schema;

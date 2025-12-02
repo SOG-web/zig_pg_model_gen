@@ -4,8 +4,11 @@ const Alter = @import("schema.zig").Alter;
 const AutoGenerateType = @import("schema.zig").AutoGenerateType;
 const Field = @import("schema.zig").Field;
 const FieldType = @import("schema.zig").FieldType;
+const HasManyRelationship = @import("schema.zig").HasManyRelationship;
 const Index = @import("schema.zig").Index;
 const InputMode = @import("schema.zig").InputMode;
+const OnDeleteAction = @import("schema.zig").OnDeleteAction;
+const OnUpdateAction = @import("schema.zig").OnUpdateAction;
 const Relationship = @import("schema.zig").Relationship;
 
 pub const FieldInput = struct {
@@ -36,6 +39,7 @@ alters: std.ArrayList(Field) = .{},
 indexes: std.ArrayList(Index) = .{},
 drop_indexes: std.ArrayList([]const u8) = .{},
 relationships: std.ArrayList(Relationship) = .{},
+has_many_relationships: std.ArrayList(HasManyRelationship) = .{},
 allocator: std.mem.Allocator,
 err: ?anyerror = null,
 
@@ -61,6 +65,7 @@ pub fn create(name: []const u8, allocator: std.mem.Allocator, builder: *const fn
         .alters = std.ArrayList(Field){},
         .indexes = std.ArrayList(Index){},
         .relationships = std.ArrayList(Relationship){},
+        .has_many_relationships = std.ArrayList(HasManyRelationship){},
     };
 
     builder(&self);
@@ -78,6 +83,7 @@ pub fn deinit(self: *TableSchema) void {
     self.alters.deinit(self.allocator);
     self.indexes.deinit(self.allocator);
     self.relationships.deinit(self.allocator);
+    self.has_many_relationships.deinit(self.allocator);
 }
 
 pub fn getFieldByName(self: *TableSchema, field_name: []const u8) !*const Field {
@@ -386,6 +392,128 @@ pub fn foreign(self: *TableSchema, rel: Relationship) void {
 pub fn foreigns(self: *TableSchema, rels: []const Relationship) void {
     if (self.err != null) return;
     self.relationships.appendSlice(self.allocator, rels) catch |err| {
+        self.err = err;
+    };
+}
+
+/// Define a belongs-to relationship (many-to-one).
+/// This table has a foreign key column that references another table.
+/// Example: Post belongs to User (posts.user_id -> users.id)
+///
+/// ```zig
+/// t.belongsTo(.{
+///     .name = "post_author",
+///     .column = "user_id",
+///     .references_table = "users",
+///     .references_column = "id",
+///     .on_delete = .cascade,
+/// });
+/// ```
+pub fn belongsTo(self: *TableSchema, options: struct {
+    name: []const u8,
+    column: []const u8,
+    references_table: []const u8,
+    references_column: []const u8 = "id",
+    on_delete: OnDeleteAction = .no_action,
+    on_update: OnUpdateAction = .no_action,
+}) void {
+    self.foreign(.{
+        .name = options.name,
+        .column = options.column,
+        .references_table = options.references_table,
+        .references_column = options.references_column,
+        .relationship_type = .many_to_one,
+        .on_delete = options.on_delete,
+        .on_update = options.on_update,
+    });
+}
+
+/// Define a has-one relationship (one-to-one).
+/// This table has a unique foreign key column that references another table.
+/// Example: User has one Profile (users.profile_id -> profiles.id)
+///
+/// ```zig
+/// t.hasOne(.{
+///     .name = "user_profile",
+///     .column = "profile_id",
+///     .references_table = "profiles",
+///     .references_column = "id",
+///     .on_delete = .set_null,
+/// });
+/// ```
+pub fn hasOne(self: *TableSchema, options: struct {
+    name: []const u8,
+    column: []const u8,
+    references_table: []const u8,
+    references_column: []const u8 = "id",
+    on_delete: OnDeleteAction = .no_action,
+    on_update: OnUpdateAction = .no_action,
+}) void {
+    self.foreign(.{
+        .name = options.name,
+        .column = options.column,
+        .references_table = options.references_table,
+        .references_column = options.references_column,
+        .relationship_type = .one_to_one,
+        .on_delete = options.on_delete,
+        .on_update = options.on_update,
+    });
+}
+
+/// Define a many-to-many relationship through a junction table.
+/// This creates metadata for the relationship - the junction table must be defined separately.
+/// Example: Users <-> Roles through user_roles junction table
+///
+/// ```zig
+/// t.manyToMany(.{
+///     .name = "user_roles",
+///     .column = "user_id",           // FK column in junction table pointing to this table
+///     .references_table = "user_roles", // The junction table
+///     .references_column = "user_id",   // Column in junction that references this table
+/// });
+/// ```
+pub fn manyToMany(self: *TableSchema, options: struct {
+    name: []const u8,
+    column: []const u8,
+    references_table: []const u8,
+    references_column: []const u8,
+    on_delete: OnDeleteAction = .cascade,
+    on_update: OnUpdateAction = .no_action,
+}) void {
+    self.foreign(.{
+        .name = options.name,
+        .column = options.column,
+        .references_table = options.references_table,
+        .references_column = options.references_column,
+        .relationship_type = .many_to_many,
+        .on_delete = options.on_delete,
+        .on_update = options.on_update,
+    });
+}
+
+/// Define a one-to-many relationship from this table (parent) to another table (child).
+/// This is metadata only - no FK constraint is generated here (the FK lives in the child table).
+/// This generates helper methods like `fetchUserPosts()` on this model.
+///
+/// Example in users.zig:
+/// ```zig
+/// t.hasMany(.{
+///     .name = "user_posts",
+///     .foreign_table = "posts",
+///     .foreign_column = "user_id",
+/// });
+/// ```
+pub fn hasMany(self: *TableSchema, rel: HasManyRelationship) void {
+    if (self.err != null) return;
+    self.has_many_relationships.append(self.allocator, rel) catch |err| {
+        self.err = err;
+    };
+}
+
+/// Define multiple one-to-many relationships at once.
+pub fn hasManyList(self: *TableSchema, rels: []const HasManyRelationship) void {
+    if (self.err != null) return;
+    self.has_many_relationships.appendSlice(self.allocator, rels) catch |err| {
         self.err = err;
     };
 }

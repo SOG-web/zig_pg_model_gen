@@ -63,13 +63,17 @@ pub fn build(t: *TableSchema) void {
         .update_input = false,
     });
 
-    // Relationship: one user has many posts
-    t.foreign(.{
+    // One-to-many: User has many posts (metadata only, FK is in posts table)
+    t.hasMany(.{
         .name = "user_posts",
-        .column = "id",
-        .references_table = "posts",
-        .references_column = "user_id",
-        .relationship_type = .one_to_many,
-        .on_delete = .cascade,
+        .foreign_table = "posts",
+        .foreign_column = "user_id",
+    });
+
+    // One-to-many: User has many comments
+    t.hasMany(.{
+        .name = "user_comments",
+        .foreign_table = "comments",
+        .foreign_column = "user_id",
     });
 }

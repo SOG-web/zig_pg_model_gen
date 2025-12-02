@@ -304,13 +304,49 @@ t.dateTime(.{
 });
 ```
 
-### Foreign Keys
+### Foreign Keys and Relationships
 
 See [RELATIONSHIPS.md](RELATIONSHIPS.md) for detailed relationship documentation.
 
-```zig
-t.uuid(.{ .name = "user_id" });
+FluentORM provides convenience methods for common relationship patterns:
 
+```zig
+// Many-to-One: This table has FK pointing to another table
+t.uuid(.{ .name = "user_id" });
+t.belongsTo(.{
+    .name = "post_author",
+    .column = "user_id",
+    .references_table = "users",
+    .on_delete = .cascade,
+});
+
+// One-to-One: Unique FK relationship
+t.uuid(.{ .name = "profile_id", .unique = true });
+t.hasOne(.{
+    .name = "user_profile",
+    .column = "profile_id",
+    .references_table = "profiles",
+});
+
+// One-to-Many: Other table has FKs to this table (metadata only)
+t.hasMany(.{
+    .name = "user_posts",
+    .foreign_table = "posts",
+    .foreign_column = "user_id",
+});
+
+// Many-to-Many: Junction table relationships
+t.manyToMany(.{
+    .name = "post_category",
+    .column = "post_id",
+    .references_table = "posts",
+    .references_column = "id",
+});
+```
+
+Or use the generic `foreign()` method for full control:
+
+```zig
 t.foreign(.{
     .name = "post_author",
     .column = "user_id",
@@ -320,6 +356,69 @@ t.foreign(.{
     .on_delete = .cascade,
 });
 ```
+
+## Modifying Fields with `alterField()`
+
+Use `alterField()` to modify properties of an existing field after it's been defined. This is useful for changing constraints, input modes, or other properties without redefining the entire field.
+
+### Basic Usage
+
+```zig
+pub fn build(t: *TableSchema) void {
+    // Original field definition
+    t.string(.{
+        .name = "bio",
+        .not_null = true,
+    });
+
+    // Later, alter it to be optional and redacted
+    t.alterField(.{
+        .name = "bio",
+        .not_null = false,
+        .create_input = .optional,
+        .redacted = true,
+    });
+}
+```
+
+### `alterField()` Options
+
+Only specify the properties you want to change; others retain their original values:
+
+| Option               | Type                | Description                          |
+| -------------------- | ------------------- | ------------------------------------ |
+| `name`               | `[]const u8`        | **Required**: Name of field to alter |
+| `type`               | `?FieldType`        | Change the field type                |
+| `primary_key`        | `?bool`             | Change primary key status            |
+| `unique`             | `?bool`             | Change unique constraint             |
+| `not_null`           | `?bool`             | Change NOT NULL constraint           |
+| `create_input`       | `?InputMode`        | Change create input mode             |
+| `update_input`       | `?bool`             | Change update input inclusion        |
+| `redacted`           | `?bool`             | Change JSON response redaction       |
+| `default_value`      | `?[]const u8`       | Change SQL default value             |
+| `auto_generated`     | `?bool`             | Change auto-generation status        |
+| `auto_generate_type` | `?AutoGenerateType` | Change auto-generation type          |
+
+### Altering Multiple Fields
+
+Use `alterFields()` to modify multiple fields at once:
+
+```zig
+t.alterFields(&.{
+    .{ .name = "email", .unique = true },
+    .{ .name = "bio", .not_null = false, .redacted = true },
+    .{ .name = "password_hash", .redacted = true },
+});
+```
+
+### When to Use `alterField()`
+
+- **Changing constraints**: Make a field nullable, add unique constraint
+- **Changing input modes**: Switch from `.required` to `.optional`
+- **Adding redaction**: Mark a field as sensitive after the fact
+- **Modifying defaults**: Change the SQL default value
+
+> **Note**: `alterField()` modifies the field for code generation purposes. If your database already has data, you may need to run corresponding `ALTER TABLE` statements to sync the database schema.
 
 ## Complete Example
 
@@ -415,7 +514,7 @@ CREATE TABLE IF NOT EXISTS users (
 ### Zig Model
 
 ```zig
-pub const User = struct {
+pub const Users = struct {
     id: []const u8,
     email: []const u8,
     name: []const u8,
@@ -427,9 +526,10 @@ pub const User = struct {
     updated_at: i64,
     deleted_at: ?i64,
 
-    // CRUD methods: insert, findById, findAll, update, delete, etc.
+    // CRUD methods: insert, findById, findAll, update, softDelete, hardDelete, etc.
     // Query builder: query()
-    // DDL methods: createTable, dropTable, etc.
+    // DDL methods: truncate, tableExists
+    // JSON helpers: toJsonResponse, toJsonResponseSafe
 };
 ```
 

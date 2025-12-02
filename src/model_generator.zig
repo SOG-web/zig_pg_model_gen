@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Field = @import("schema.zig").Field;
+const HasManyRelationship = @import("schema.zig").HasManyRelationship;
 const Relationship = @import("schema.zig").Relationship;
 const TableSchema = @import("table.zig").TableSchema;
 
@@ -139,6 +140,28 @@ fn relationshipToFieldName(allocator: std.mem.Allocator, rel: Relationship) ![]c
     }
 }
 
+fn hasManyMethodName(allocator: std.mem.Allocator, rel_name: []const u8) ![]const u8 {
+    // Convert "user_posts" -> "Posts", "user_comments" -> "Comments"
+    // Takes the last part after underscore and converts to PascalCase
+    // If no underscore, just capitalize first letter
+
+    // Find the last underscore
+    var last_underscore: ?usize = null;
+    for (rel_name, 0..) |c, i| {
+        if (c == '_') {
+            last_underscore = i;
+        }
+    }
+
+    const name_part = if (last_underscore) |idx|
+        rel_name[idx + 1 ..]
+    else
+        rel_name;
+
+    // Convert to PascalCase (capitalize first letter, keep the rest including plural 's')
+    return toPascalCaseNonSingular(allocator, name_part);
+}
+
 fn getFinalFields(allocator: std.mem.Allocator, schema: TableSchema) ![]Field {
     var fields = std.ArrayList(Field){};
     defer fields.deinit(allocator);
@@ -176,6 +199,10 @@ pub fn generateModel(allocator: std.mem.Allocator, schema: TableSchema, schema_f
     const file_name = try std.fmt.allocPrint(allocator, "{s}/{s}.zig", .{ output_dir, snake_case_name });
     defer allocator.free(file_name);
 
+    // Generate PascalCase struct name (e.g., "comments" -> "Comments")
+    const struct_name = try toPascalCaseNonSingular(allocator, schema.name);
+    defer allocator.free(struct_name);
+
     var output = std.ArrayList(u8){};
     defer output.deinit(allocator);
     const writer = output.writer(allocator);
@@ -187,7 +214,7 @@ pub fn generateModel(allocator: std.mem.Allocator, schema: TableSchema, schema_f
     try generateImports(writer, schema, allocator);
 
     // Generate struct definition
-    try generateStructDefinition(writer, schema, final_fields, allocator);
+    try generateStructDefinition(writer, schema, struct_name, final_fields, allocator);
 
     // Generate CreateInput
     try generateCreateInput(writer, final_fields, allocator);
@@ -196,25 +223,25 @@ pub fn generateModel(allocator: std.mem.Allocator, schema: TableSchema, schema_f
     try generateUpdateInput(writer, final_fields, allocator);
 
     // Generate SQL methods
-    try generateSQLMethods(writer, schema, final_fields, allocator);
+    try generateSQLMethods(writer, schema, struct_name, final_fields, allocator);
 
     // Generate base
-    try generateBaseModelWrapper(writer, schema);
+    try generateBaseModelWrapper(writer, struct_name);
 
     // Generate DDL wrappers
     try generateDDLWrappers(writer);
 
     // Generate CRUD wrappers
-    try generateCRUDWrappers(writer, schema);
+    try generateCRUDWrappers(writer, struct_name);
 
     // Generate JSON response helpers
-    try generateJsonResponseHelpers(writer, schema, final_fields);
+    try generateJsonResponseHelpers(writer, struct_name, final_fields);
 
     // Generate relationship methods
-    try generateRelationshipMethods(writer, schema, allocator);
+    try generateRelationshipMethods(writer, schema, struct_name, allocator);
 
     // Generate transaction support
-    try generateTransactionSupport(writer, schema);
+    try generateTransactionSupport(writer, struct_name);
 
     // Write to file
     try std.fs.cwd().writeFile(.{ .sub_path = file_name, .data = output.items });
@@ -243,40 +270,57 @@ fn generateImports(writer: anytype, schema: TableSchema, allocator: std.mem.Allo
         \\
     );
 
-    // Add imports for related models
-    if (schema.relationships.items.len > 0) {
+    // Collect all related tables from both relationships and has_many_relationships
+    var seen_tables = std.StringHashMap(void).init(allocator);
+    defer seen_tables.deinit();
+
+    // Add imports from regular relationships (belongsTo, hasOne, foreign)
+    for (schema.relationships.items) |rel| {
+        // Skip self-references (e.g., comments referencing comments for parent_id)
+        if (std.mem.eql(u8, rel.references_table, schema.name)) continue;
+
+        if (!seen_tables.contains(rel.references_table)) {
+            try seen_tables.put(rel.references_table, {});
+        }
+    }
+
+    // Add imports from hasMany relationships
+    for (schema.has_many_relationships.items) |rel| {
+        // Skip self-references (e.g., comments has many comments for replies)
+        if (std.mem.eql(u8, rel.foreign_table, schema.name)) continue;
+
+        if (!seen_tables.contains(rel.foreign_table)) {
+            try seen_tables.put(rel.foreign_table, {});
+        }
+    }
+
+    // Generate imports if we have any related models
+    if (seen_tables.count() > 0) {
         try writer.writeAll("\n// Related models\n");
 
-        var seen_tables = std.StringHashMap(void).init(allocator);
-        defer seen_tables.deinit();
+        var iter = seen_tables.keyIterator();
+        while (iter.next()) |table_name| {
+            // Use PascalCase non-singular for both import name and struct reference
+            // e.g., "comments" -> "Comments" (the struct is Comments, not Comment)
+            const struct_name = try toPascalCaseNonSingular(allocator, table_name.*);
+            defer allocator.free(struct_name);
 
-        for (schema.relationships.items) |rel| {
-            // Only add each import once
-            if (!seen_tables.contains(rel.references_table)) {
-                try seen_tables.put(rel.references_table, {});
-
-                const struct_name = try toPascalCaseNonSingular(allocator, rel.references_table);
-                defer allocator.free(struct_name);
-
-                // Convert struct name to snake_case for filename
-                const file_name = try toLowerSnakeCase(allocator, struct_name);
-                defer allocator.free(file_name);
-
-                try writer.print("const {s} = @import(\"{s}.zig\");\n", .{
-                    singularize(struct_name),
-                    file_name,
-                });
-            }
+            try writer.print("const {s} = @import(\"{s}.zig\");\n", .{
+                struct_name,
+                table_name.*,
+            });
         }
     }
 
     try writer.writeAll("\n");
 }
 
-fn generateStructDefinition(writer: anytype, schema: TableSchema, fields: []const Field, allocator: std.mem.Allocator) !void {
+fn generateStructDefinition(writer: anytype, schema: TableSchema, struct_name: []const u8, fields: []const Field, allocator: std.mem.Allocator) !void {
+    _ = schema;
     _ = allocator;
-    try writer.print("const {s} = @This();\n\n", .{schema.name});
-    try writer.writeAll("    // Fields\n");
+
+    try writer.print("const {s} = @This();\n\n", .{struct_name});
+    try writer.writeAll("// Fields\n");
 
     for (fields) |field| {
         try writer.print("{s}: {s},\n", .{ field.name, field.type.toZigType() });
@@ -332,8 +376,9 @@ fn generateUpdateInput(writer: anytype, fields: []const Field, allocator: std.me
     try writer.writeAll("    };\n\n");
 }
 
-fn generateSQLMethods(writer: anytype, schema: TableSchema, fields: []const Field, allocator: std.mem.Allocator) !void {
-    // tableName
+fn generateSQLMethods(writer: anytype, schema: TableSchema, struct_name: []const u8, fields: []const Field, allocator: std.mem.Allocator) !void {
+    _ = struct_name;
+    // tableName - uses table name (snake_case) for SQL
     try writer.print(
         \\    // Model configuration
         \\    pub fn tableName() []const u8 {{
@@ -583,8 +628,8 @@ fn generateUpsertSQL(writer: anytype, schema: TableSchema, fields: []const Field
     try writer.writeAll("    }\n\n");
 }
 
-fn generateBaseModelWrapper(writer: anytype, schema: TableSchema) !void {
-    try writer.print("    const base = BaseModel({s});\n", .{schema.name});
+fn generateBaseModelWrapper(writer: anytype, struct_name: []const u8) !void {
+    try writer.print("    const base = BaseModel({s});\n", .{struct_name});
 }
 
 fn generateDDLWrappers(writer: anytype) !void {
@@ -599,7 +644,7 @@ fn generateDDLWrappers(writer: anytype) !void {
     );
 }
 
-fn generateCRUDWrappers(writer: anytype, schema: TableSchema) !void {
+fn generateCRUDWrappers(writer: anytype, struct_name: []const u8) !void {
     try writer.writeAll(
         \\    // CRUD operations
         \\    pub const findById = base.findById;
@@ -629,14 +674,12 @@ fn generateCRUDWrappers(writer: anytype, schema: TableSchema) !void {
         \\
     );
 
-    try writer.print("    pub fn query() QueryBuilder({s}, UpdateInput, FieldEnum) {{\n", .{schema.name});
-    try writer.print("        return QueryBuilder({s}, UpdateInput, FieldEnum).init();\n", .{schema.name});
+    try writer.print("    pub fn query() QueryBuilder({s}, UpdateInput, FieldEnum) {{\n", .{struct_name});
+    try writer.print("        return QueryBuilder({s}, UpdateInput, FieldEnum).init();\n", .{struct_name});
     try writer.writeAll("    }\n\n");
 }
 
-fn generateJsonResponseHelpers(writer: anytype, schema: TableSchema, fields: []const Field) !void {
-    const struct_name = schema.name;
-
+fn generateJsonResponseHelpers(writer: anytype, struct_name: []const u8, fields: []const Field) !void {
     // Generate JsonResponse struct with UUIDs as hex strings
     try writer.writeAll("\n    /// JSON-safe response struct with UUIDs as hex strings\n");
     try writer.writeAll("    pub const JsonResponse = struct {\n");
@@ -728,13 +771,24 @@ fn generateJsonResponseHelpers(writer: anytype, schema: TableSchema, fields: []c
     try writer.writeAll("    }\n");
 }
 
-fn generateRelationshipMethods(writer: anytype, schema: TableSchema, allocator: std.mem.Allocator) !void {
-    if (schema.relationships.items.len == 0) return;
+fn generateRelationshipMethods(writer: anytype, schema: TableSchema, struct_name: []const u8, allocator: std.mem.Allocator) !void {
+    const has_relationships = schema.relationships.items.len > 0;
+    const has_many_relationships = schema.has_many_relationships.items.len > 0;
+
+    if (!has_relationships and !has_many_relationships) return;
 
     try writer.writeAll("    // Relationship methods\n");
 
+    // Generate methods for regular relationships (belongsTo, hasOne, foreign)
     for (schema.relationships.items) |rel| {
-        const related_struct_name = try tableToPascalCase(allocator, rel.references_table);
+        // Skip self-references for method generation - we'll use @This() for those
+        const is_self_reference = std.mem.eql(u8, rel.references_table, schema.name);
+
+        // Use PascalCase non-singular to match struct names (Comments, not Comment)
+        const related_struct_name = if (is_self_reference)
+            try allocator.dupe(u8, struct_name)
+        else
+            try toPascalCaseNonSingular(allocator, rel.references_table);
         defer allocator.free(related_struct_name);
 
         const is_plural = (rel.relationship_type == .one_to_many or rel.relationship_type == .many_to_many);
@@ -757,9 +811,9 @@ fn generateRelationshipMethods(writer: anytype, schema: TableSchema, allocator: 
                     \\
                 , .{
                     related_struct_name,
-                    schema.name,
+                    struct_name,
                     method_suffix,
-                    schema.name,
+                    struct_name,
                     related_struct_name,
                     related_struct_name,
                     rel.column,
@@ -787,9 +841,9 @@ fn generateRelationshipMethods(writer: anytype, schema: TableSchema, allocator: 
                         \\
                     , .{
                         related_struct_name,
-                        schema.name,
+                        struct_name,
                         method_suffix,
-                        schema.name,
+                        struct_name,
                         related_struct_name,
                         rel.references_table,
                         rel.references_column,
@@ -806,9 +860,9 @@ fn generateRelationshipMethods(writer: anytype, schema: TableSchema, allocator: 
                         \\
                     , .{
                         related_struct_name,
-                        schema.name,
+                        struct_name,
                         method_suffix,
-                        schema.name,
+                        struct_name,
                         related_struct_name,
                         related_struct_name,
                         rel.column,
@@ -838,9 +892,9 @@ fn generateRelationshipMethods(writer: anytype, schema: TableSchema, allocator: 
                     \\
                 , .{
                     related_struct_name,
-                    schema.name,
+                    struct_name,
                     method_suffix,
-                    schema.name,
+                    struct_name,
                     related_struct_name,
                     rel.references_table,
                     rel.references_column,
@@ -860,17 +914,63 @@ fn generateRelationshipMethods(writer: anytype, schema: TableSchema, allocator: 
         }
     }
 
-    // Note: We don't generate findByIdWithRelations anymore
-    // because relationship fields are not part of the struct to avoid circular dependencies.
-    // Users should fetch relationships individually using fetch*() methods as needed.
+    // Generate methods for hasMany relationships
+    for (schema.has_many_relationships.items) |rel| {
+        // Skip self-references for method generation - we'll use struct_name for those
+        const is_self_reference = std.mem.eql(u8, rel.foreign_table, schema.name);
+
+        // Use PascalCase non-singular to match struct names (Comments, not Comment)
+        const related_struct_name = if (is_self_reference)
+            try allocator.dupe(u8, struct_name)
+        else
+            try toPascalCaseNonSingular(allocator, rel.foreign_table);
+        defer allocator.free(related_struct_name);
+
+        // Create method name from relationship name: "user_posts" -> "Posts"
+        const method_suffix = try hasManyMethodName(allocator, rel.name);
+        defer allocator.free(method_suffix);
+
+        // Generate fetchMany method
+        try writer.print(
+            \\    /// Fetch all related {s} records for this {s} (one-to-many)
+            \\    pub fn fetch{s}(self: *const {s}, db: *pg.Pool, allocator: std.mem.Allocator) ![]{s} {{
+            \\        const queryt = "SELECT * FROM {s} WHERE {s} = $1";
+            \\        var result = try db.query(queryt, .{{self.{s}}});
+            \\        defer result.deinit();
+            \\
+            \\        var list = std.ArrayList({s}){{}};
+            \\        errdefer list.deinit(allocator);
+            \\
+            \\        while (try result.next()) |row| {{
+            \\            const item = try row.to({s}, .{{ .allocator = allocator, .map = .ordinal }});
+            \\            try list.append(allocator, item);
+            \\        }}
+            \\
+            \\        return try list.toOwnedSlice(allocator);
+            \\    }}
+            \\
+            \\
+        , .{
+            related_struct_name,
+            struct_name,
+            method_suffix,
+            struct_name,
+            related_struct_name,
+            rel.foreign_table,
+            rel.foreign_column,
+            rel.local_column,
+            related_struct_name,
+            related_struct_name,
+        });
+    }
 }
 
-fn generateTransactionSupport(writer: anytype, schema: TableSchema) !void {
+fn generateTransactionSupport(writer: anytype, struct_name: []const u8) !void {
     try writer.writeAll(
         \\    // Transaction support
         \\    pub const TransactionType = Transaction(
     );
-    try writer.print("{s});\n\n", .{schema.name});
+    try writer.print("{s});\n\n", .{struct_name});
 
     try writer.writeAll("    pub fn beginTransaction(conn: *pg.Conn) !TransactionType {\n");
     try writer.writeAll("        return TransactionType.begin(conn);\n");
@@ -889,7 +989,8 @@ pub fn generateBarrelFile(allocator: std.mem.Allocator, schemas: []const TableSc
     try writer.writeAll("// Generated by scripts/generate_model.zig\n\n");
 
     for (schemas) |schema| {
-        const struct_name = try tableToPascalCase(allocator, schema.name);
+        // Use non-singular PascalCase to match struct names (Users, Posts, Comments)
+        const struct_name = try toPascalCaseNonSingular(allocator, schema.name);
         defer allocator.free(struct_name);
 
         const snake_case_name = try toLowerSnakeCase(allocator, schema.name);

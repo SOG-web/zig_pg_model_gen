@@ -23,7 +23,7 @@ When you run `zig build generate-models`, FluentORM generates:
 Insert a new record and get back the primary key:
 
 ```zig
-const user_id = try User.insert(&pool, allocator, .{
+const user_id = try Users.insert(&pool, allocator, .{
     .email = "alice@example.com",
     .name = "Alice",
     .password_hash = "hashed_password",
@@ -36,7 +36,7 @@ defer allocator.free(user_id);
 #### Insert and Return Full Object
 
 ```zig
-const user = try User.insertAndReturn(&pool, allocator, .{
+const user = try Users.insertAndReturn(&pool, allocator, .{
     .email = "alice@example.com",
     .name = "Alice",
     .password_hash = "hashed_password",
@@ -49,7 +49,7 @@ defer allocator.free(user);
 #### Find by ID
 
 ```zig
-if (try User.findById(&pool, allocator, user_id)) |user| {
+if (try Users.findById(&pool, allocator, user_id)) |user| {
     defer allocator.free(user);
     std.debug.print("Found user: {s}\n", .{user.name});
 }
@@ -60,7 +60,7 @@ Returns `null` if not found or if the record is soft-deleted.
 #### Query with conditions
 
 ```zig
-var query = User.query();
+var query = Users.query();
 defer query.deinit();
 
 const users = try query
@@ -72,14 +72,14 @@ defer allocator.free(users);
 #### Fetch all records
 
 ```zig
-const all_users = try User.findAll(&pool, allocator, false);
+const all_users = try Users.findAll(&pool, allocator, false);
 defer allocator.free(all_users);
 ```
 
 To include soft-deleted records, pass `true`:
 
 ```zig
-const all_including_deleted = try User.findAll(&pool, allocator, true);
+const all_including_deleted = try Users.findAll(&pool, allocator, true);
 defer allocator.free(all_including_deleted);
 ```
 
@@ -88,7 +88,7 @@ defer allocator.free(all_including_deleted);
 Update specific fields for a record:
 
 ```zig
-try User.update(&pool, user_id, .{
+try Users.update(&pool, user_id, .{
     .name = "Alice Smith",
     .email = "alice.smith@example.com",
 });
@@ -99,7 +99,7 @@ try User.update(&pool, user_id, .{
 #### Update and Return
 
 ```zig
-const updated_user = try User.updateAndReturn(&pool, allocator, user_id, .{
+const updated_user = try Users.updateAndReturn(&pool, allocator, user_id, .{
     .name = "Alice Smith",
 });
 defer allocator.free(updated_user);
@@ -110,7 +110,7 @@ defer allocator.free(updated_user);
 Insert a record, or update if a unique constraint violation occurs:
 
 ```zig
-const user_id = try User.upsert(&pool, allocator, .{
+const user_id = try Users.upsert(&pool, allocator, .{
     .email = "alice@example.com",
     .name = "Alice",
     .password_hash = "hashed_password",
@@ -123,7 +123,7 @@ defer allocator.free(user_id);
 #### Upsert and Return
 
 ```zig
-const user = try User.upsertAndReturn(&pool, allocator, .{
+const user = try Users.upsertAndReturn(&pool, allocator, .{
     .email = "alice@example.com",
     .name = "Alice",
     .password_hash = "hashed_password",
@@ -138,7 +138,7 @@ defer allocator.free(user);
 If your schema includes a `deleted_at` field, you can use soft deletes:
 
 ```zig
-try User.softDelete(&pool, user_id);
+try Users.softDelete(&pool, user_id);
 ```
 
 Soft-deleted records are automatically excluded from queries by default. Use `.withDeleted()` on queries to include them.
@@ -148,70 +148,46 @@ Soft-deleted records are automatically excluded from queries by default. Use `.w
 Permanently removes the record:
 
 ```zig
-try User.hardDelete(&pool, user_id);
+try Users.hardDelete(&pool, user_id);
 ```
 
 **Warning**: This is irreversible and bypasses any soft-delete logic.
 
 ## DDL Operations
 
-Base models provide Data Definition Language (DDL) operations for schema management.
-
-### Create Table
-
-Execute the generated `CREATE TABLE` SQL statement:
-
-```zig
-try User.createTable(&pool);
-```
-
-This creates the table with all fields, constraints, and indexes defined in your schema.
-
-### Create Indexes
-
-Create all indexes defined in the schema:
-
-```zig
-try User.createIndexes(&pool);
-```
-
-### Drop Table
-
-Remove the table from the database:
-
-```zig
-try User.dropTable(&pool);
-```
-
-**Warning**: This is a destructive operation and will delete all data.
+Base models provide limited Data Definition Language (DDL) operations.
 
 ### Truncate Table
 
 Remove all data but keep the table structure:
 
 ```zig
-try User.truncate(&pool);
+try Users.truncate(&pool);
 ```
+
+**Warning**: This permanently deletes all data in the table.
 
 ### Check Table Existence
 
 ```zig
-const exists = try User.tableExists(&pool);
+const exists = try Users.tableExists(&pool);
 if (exists) {
     std.debug.print("Table exists\n", .{});
 }
 ```
+
+> **Note**: `createTable()`, `dropTable()`, and `createIndexes()` methods are not currently available. Use the generated SQL migration files to create/drop tables. See [MIGRATIONS.md](MIGRATIONS.md) for details.
 
 ## Utility Operations
 
 ### Count Records
 
 ```zig
-const total_users = try User.count(&pool, false);
+const total_users = try Users.count(&pool, false);
 std.debug.print("Total users: {d}\n", .{total_users});
 
 // Include soft-deleted
-const total_including_deleted = try User.count(&pool, true);
+const total_including_deleted = try Users.count(&pool, true);
 ```
 
 ### Convert Row to Model
@@ -219,32 +195,45 @@ const total_including_deleted = try User.count(&pool, true);
 Helper to convert a `pg.zig` row result into a model instance:
 
 ```zig
-const user = try User.fromRow(row, allocator);
+const user = try Users.fromRow(row, allocator);
 ```
 
 ### Get Table Name
 
 ```zig
-const table_name = User.tableName();
+const table_name = Users.tableName();
 std.debug.print("Table: {s}\n", .{table_name});
 ```
 
 ## JSON Response Helpers
 
-Generated models include JSON-safe response types that convert UUIDs from byte arrays to strings:
+Generated models include JSON-safe response types that convert UUIDs from byte arrays to hex strings:
+
+### JsonResponse
+
+Includes all fields:
 
 ```zig
-const user = try User.findById(&pool, allocator, user_id);
-defer allocator.free(user);
+if (try Users.findById(&pool, allocator, user_id)) |user| {
+    defer allocator.free(user);
 
-const json_response = try user.?.toResponse(allocator);
-defer json_response.deinit(allocator);
-
-// Serialize to JSON
-try std.json.stringify(json_response, .{}, writer);
+    const json_response = try user.toJsonResponse();
+    // json_response.id is now a [36]u8 hex string like "550e8400-e29b-41d4-a716-446655440000"
+}
 ```
 
-Fields marked with `.redacted = true` (like `password_hash`) are automatically excluded from JSON responses.
+### JsonResponseSafe
+
+Excludes fields marked with `.redacted = true` (like `password_hash`):
+
+```zig
+if (try Users.findById(&pool, allocator, user_id)) |user| {
+    defer allocator.free(user);
+
+    const safe_response = try user.toJsonResponseSafe();
+    // password_hash is NOT included in this response
+}
+```
 
 ## Field Access
 
@@ -258,18 +247,52 @@ std.debug.print("Active: {}\n", .{user.is_active});
 
 ## Relationship Methods
 
-If you've defined relationships in your schema using `t.foreign()`, the generator creates typed methods for fetching related records:
+If you've defined relationships in your schema, the generator creates typed methods for fetching related records.
+
+### BelongsTo / HasOne (Many-to-One, One-to-One)
 
 ```zig
-// One-to-many relationship (user has many posts)
-const user_posts = try user.fetchPostAuthor(&pool, allocator);
-defer allocator.free(user_posts);
-
-// Many-to-one relationship (post belongs to user)
+// Post belongs to User
 if (try post.fetchPostAuthor(&pool, allocator)) |author| {
     defer allocator.free(author);
     std.debug.print("Author: {s}\n", .{author.name});
 }
+
+// Profile has one User
+if (try profile.fetchProfileUser(&pool, allocator)) |user| {
+    defer allocator.free(user);
+    std.debug.print("User: {s}\n", .{user.name});
+}
+```
+
+### HasMany (One-to-Many)
+
+```zig
+// User has many Posts (defined with t.hasMany())
+const user_posts = try user.fetchPosts(&pool, allocator);
+defer allocator.free(user_posts);
+
+for (user_posts) |p| {
+    std.debug.print("Post: {s}\n", .{p.title});
+}
+
+// User has many Comments
+const user_comments = try user.fetchComments(&pool, allocator);
+defer allocator.free(user_comments);
+```
+
+### Self-Referential Relationships
+
+```zig
+// Comment has parent comment (self-reference)
+if (try comment.fetchParent(&pool, allocator)) |parent| {
+    defer allocator.free(parent);
+    std.debug.print("Reply to: {s}\n", .{parent.content});
+}
+
+// Comment has many replies (self-referential hasMany)
+const replies = try comment.fetchReplies(&pool, allocator);
+defer allocator.free(replies);
 ```
 
 See [RELATIONSHIPS.md](RELATIONSHIPS.md) for more details on defining and querying relationships.
@@ -295,6 +318,7 @@ const user = User.findById(&pool, allocator, user_id) catch |err| {
 ```
 
 Common errors include:
+
 - `error.QueryFailed` - SQL execution failed
 - `error.OutOfMemory` - Allocation failed
 - `error.ConnectionFailed` - Database connection issue

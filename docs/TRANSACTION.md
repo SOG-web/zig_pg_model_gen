@@ -10,7 +10,7 @@ Transactions are handled via the `Transaction` struct, which wraps a database co
 const Transaction = @import("transaction.zig").Transaction;
 
 // 1. Start a transaction
-var tx = try Transaction(User).begin(conn);
+var tx = try Transaction(Users).begin(conn);
 // Ensure rollback on error
 defer tx.deinit();
 
