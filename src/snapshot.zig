@@ -63,11 +63,53 @@ pub const HasManySnapshot = struct {
     local_column: []const u8,
 };
 
+/// Free a single TableSnapshot's allocated memory
+fn freeTableSnapshotInternal(allocator: std.mem.Allocator, table: TableSnapshot) void {
+    for (table.fields) |f| {
+        allocator.free(f.name);
+        if (f.default_value) |dv| allocator.free(dv);
+    }
+    allocator.free(table.fields);
+
+    for (table.indexes) |idx| {
+        for (idx.columns) |col| allocator.free(col);
+        allocator.free(idx.columns);
+        allocator.free(idx.name);
+    }
+    allocator.free(table.indexes);
+
+    for (table.relationships) |rel| {
+        allocator.free(rel.name);
+        allocator.free(rel.column);
+        allocator.free(rel.references_table);
+        allocator.free(rel.references_column);
+    }
+    allocator.free(table.relationships);
+
+    for (table.has_many) |hm| {
+        allocator.free(hm.name);
+        allocator.free(hm.foreign_table);
+        allocator.free(hm.foreign_column);
+        allocator.free(hm.local_column);
+    }
+    allocator.free(table.has_many);
+
+    allocator.free(table.name);
+}
+
 /// Complete database snapshot containing all tables
 pub const DatabaseSnapshot = struct {
     version: u32 = 1,
     created_at: i64,
     tables: []const TableSnapshot,
+
+    /// Free all allocated memory in the snapshot
+    pub fn deinit(self: DatabaseSnapshot, allocator: std.mem.Allocator) void {
+        for (self.tables) |table| {
+            freeTableSnapshotInternal(allocator, table);
+        }
+        allocator.free(self.tables);
+    }
 };
 
 /// Convert FieldType enum to string for JSON
@@ -99,14 +141,27 @@ fn onUpdateToString(ou: OnUpdateAction) []const u8 {
 pub fn createTableSnapshot(allocator: std.mem.Allocator, table: TableSchema) !TableSnapshot {
     // Convert fields
     var fields = std.ArrayList(FieldSnapshot){};
+    errdefer {
+        for (fields.items) |f| {
+            allocator.free(f.name);
+            if (f.default_value) |dv| allocator.free(dv);
+        }
+        fields.deinit(allocator);
+    }
+
     for (table.fields.items) |field| {
+        const name = try allocator.dupe(u8, field.name);
+        errdefer allocator.free(name);
+
+        const default_value = if (field.default_value) |dv| try allocator.dupe(u8, dv) else null;
+
         try fields.append(allocator, .{
-            .name = try allocator.dupe(u8, field.name),
+            .name = name,
             .type = fieldTypeToString(field.type),
             .primary_key = field.primary_key,
             .unique = field.unique,
             .not_null = field.not_null,
-            .default_value = if (field.default_value) |dv| try allocator.dupe(u8, dv) else null,
+            .default_value = default_value,
             .auto_generated = field.auto_generated,
             .auto_generate_type = autoGenTypeToString(field.auto_generate_type),
         });
@@ -114,27 +169,68 @@ pub fn createTableSnapshot(allocator: std.mem.Allocator, table: TableSchema) !Ta
 
     // Convert indexes
     var indexes = std.ArrayList(IndexSnapshot){};
+    errdefer {
+        for (indexes.items) |idx| {
+            for (idx.columns) |col| allocator.free(col);
+            allocator.free(idx.columns);
+            allocator.free(idx.name);
+        }
+        indexes.deinit(allocator);
+    }
+
     for (table.indexes.items) |idx| {
         // Dupe the columns array
         var cols = std.ArrayList([]const u8){};
+        errdefer {
+            for (cols.items) |col| allocator.free(col);
+            cols.deinit(allocator);
+        }
+
         for (idx.columns) |col| {
             try cols.append(allocator, try allocator.dupe(u8, col));
         }
+
+        const name = try allocator.dupe(u8, idx.name);
+        errdefer allocator.free(name);
+
+        const columns = try cols.toOwnedSlice(allocator);
+
         try indexes.append(allocator, .{
-            .name = try allocator.dupe(u8, idx.name),
-            .columns = try cols.toOwnedSlice(allocator),
+            .name = name,
+            .columns = columns,
             .unique = idx.unique,
         });
     }
 
     // Convert relationships
     var rels = std.ArrayList(RelationshipSnapshot){};
+    errdefer {
+        for (rels.items) |rel| {
+            allocator.free(rel.name);
+            allocator.free(rel.column);
+            allocator.free(rel.references_table);
+            allocator.free(rel.references_column);
+        }
+        rels.deinit(allocator);
+    }
+
     for (table.relationships.items) |rel| {
+        const name = try allocator.dupe(u8, rel.name);
+        errdefer allocator.free(name);
+
+        const column = try allocator.dupe(u8, rel.column);
+        errdefer allocator.free(column);
+
+        const references_table = try allocator.dupe(u8, rel.references_table);
+        errdefer allocator.free(references_table);
+
+        const references_column = try allocator.dupe(u8, rel.references_column);
+
         try rels.append(allocator, .{
-            .name = try allocator.dupe(u8, rel.name),
-            .column = try allocator.dupe(u8, rel.column),
-            .references_table = try allocator.dupe(u8, rel.references_table),
-            .references_column = try allocator.dupe(u8, rel.references_column),
+            .name = name,
+            .column = column,
+            .references_table = references_table,
+            .references_column = references_column,
             .relationship_type = relTypeToString(rel.relationship_type),
             .on_delete = onDeleteToString(rel.on_delete),
             .on_update = onUpdateToString(rel.on_update),
@@ -143,17 +239,40 @@ pub fn createTableSnapshot(allocator: std.mem.Allocator, table: TableSchema) !Ta
 
     // Convert hasMany relationships
     var has_many = std.ArrayList(HasManySnapshot){};
+    errdefer {
+        for (has_many.items) |hm| {
+            allocator.free(hm.name);
+            allocator.free(hm.foreign_table);
+            allocator.free(hm.foreign_column);
+            allocator.free(hm.local_column);
+        }
+        has_many.deinit(allocator);
+    }
+
     for (table.has_many_relationships.items) |hm| {
+        const name = try allocator.dupe(u8, hm.name);
+        errdefer allocator.free(name);
+
+        const foreign_table = try allocator.dupe(u8, hm.foreign_table);
+        errdefer allocator.free(foreign_table);
+
+        const foreign_column = try allocator.dupe(u8, hm.foreign_column);
+        errdefer allocator.free(foreign_column);
+
+        const local_column = try allocator.dupe(u8, hm.local_column);
+
         try has_many.append(allocator, .{
-            .name = try allocator.dupe(u8, hm.name),
-            .foreign_table = try allocator.dupe(u8, hm.foreign_table),
-            .foreign_column = try allocator.dupe(u8, hm.foreign_column),
-            .local_column = try allocator.dupe(u8, hm.local_column),
+            .name = name,
+            .foreign_table = foreign_table,
+            .foreign_column = foreign_column,
+            .local_column = local_column,
         });
     }
 
+    const table_name = try allocator.dupe(u8, table.name);
+
     return .{
-        .name = try allocator.dupe(u8, table.name),
+        .name = table_name,
         .fields = try fields.toOwnedSlice(allocator),
         .indexes = try indexes.toOwnedSlice(allocator),
         .relationships = try rels.toOwnedSlice(allocator),
@@ -164,6 +283,12 @@ pub fn createTableSnapshot(allocator: std.mem.Allocator, table: TableSchema) !Ta
 /// Create a database snapshot from multiple TableSchemas
 pub fn createDatabaseSnapshot(allocator: std.mem.Allocator, tables: []TableSchema) !DatabaseSnapshot {
     var table_snapshots = std.ArrayList(TableSnapshot){};
+    errdefer {
+        for (table_snapshots.items) |ts| {
+            freeTableSnapshotInternal(allocator, ts);
+        }
+        table_snapshots.deinit(allocator);
+    }
 
     for (tables) |table| {
         try table_snapshots.append(allocator, try createTableSnapshot(allocator, table));
@@ -229,24 +354,24 @@ test "create table snapshot" {
     table.string(.{ .name = "email", .unique = true });
     table.string(.{ .name = "name" });
 
-    const snapshot = try createTableSnapshot(allocator, table);
+    const snapshot_data = try createTableSnapshot(allocator, table);
 
-    try std.testing.expectEqualStrings("users", snapshot.name);
-    try std.testing.expectEqual(@as(usize, 3), snapshot.fields.len);
-    try std.testing.expectEqualStrings("id", snapshot.fields[0].name);
-    try std.testing.expectEqualStrings("email", snapshot.fields[1].name);
-    try std.testing.expectEqualStrings("name", snapshot.fields[2].name);
+    try std.testing.expectEqualStrings("users", snapshot_data.name);
+    try std.testing.expectEqual(@as(usize, 3), snapshot_data.fields.len);
+    try std.testing.expectEqualStrings("id", snapshot_data.fields[0].name);
+    try std.testing.expectEqualStrings("email", snapshot_data.fields[1].name);
+    try std.testing.expectEqualStrings("name", snapshot_data.fields[2].name);
 
-    // Free snapshot memory
-    for (snapshot.fields) |f| {
+    // Free snapshot memory manually (single table, not from createDatabaseSnapshot)
+    for (snapshot_data.fields) |f| {
         allocator.free(f.name);
         if (f.default_value) |dv| allocator.free(dv);
     }
-    allocator.free(snapshot.fields);
-    allocator.free(snapshot.indexes);
-    allocator.free(snapshot.relationships);
-    allocator.free(snapshot.has_many);
-    allocator.free(snapshot.name);
+    allocator.free(snapshot_data.fields);
+    allocator.free(snapshot_data.indexes);
+    allocator.free(snapshot_data.relationships);
+    allocator.free(snapshot_data.has_many);
+    allocator.free(snapshot_data.name);
 }
 
 test "serialize and deserialize snapshot" {

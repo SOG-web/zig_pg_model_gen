@@ -24,6 +24,8 @@ is_active: bool,
 created_at: i64,
 updated_at: i64,
 deleted_at: ?i64,
+phone: ?[]const u8,
+bio: ?[]const u8,
     pub const FieldEnum = enum {
         id,
         email,
@@ -33,6 +35,8 @@ deleted_at: ?i64,
         created_at,
         updated_at,
         deleted_at,
+        phone,
+        bio,
     };
 
 
@@ -42,6 +46,8 @@ deleted_at: ?i64,
         name: []const u8,
         password_hash: []const u8,
         is_active: ?bool = null,
+        phone: ?[]const u8 = null,
+        bio: ?[]const u8 = null,
     };
 
     // Input type for updating existing records
@@ -51,6 +57,8 @@ deleted_at: ?i64,
         password_hash: ?[]const u8 = null,
         is_active: ?bool = null,
         updated_at: ?i64 = null,
+        phone: ?[]const u8 = null,
+        bio: ?[]const u8 = null,
     };
 
     // Model configuration
@@ -61,8 +69,8 @@ deleted_at: ?i64,
     pub fn insertSQL() []const u8 {
         return
             \\INSERT INTO users (
-            \\    email, name, password_hash, is_active
-            \\) VALUES ($1, $2, $3, COALESCE($4, true))
+            \\    email, name, password_hash, is_active, phone, bio
+            \\) VALUES ($1, $2, $3, COALESCE($4, true), $5, $6)
             \\RETURNING id
         ;
     }
@@ -72,12 +80,16 @@ deleted_at: ?i64,
         []const u8,
         []const u8,
         ?bool,
+        ?[]const u8,
+        ?[]const u8,
     } {
         return .{
             data.email,
             data.name,
             data.password_hash,
             data.is_active,
+            data.phone,
+            data.bio,
         };
     }
 
@@ -89,6 +101,8 @@ deleted_at: ?i64,
             \\    password_hash = COALESCE($4, password_hash),
             \\    is_active = COALESCE($5, is_active),
             \\    updated_at = COALESCE($6, updated_at),
+            \\    phone = COALESCE($7, phone),
+            \\    bio = COALESCE($8, bio),
             \\    updated_at = CURRENT_TIMESTAMP
             \\WHERE id = $1
         ;
@@ -101,6 +115,8 @@ deleted_at: ?i64,
         ?[]const u8,
         ?bool,
         ?i64,
+        ?[]const u8,
+        ?[]const u8,
     } {
         return .{
             id,
@@ -109,18 +125,22 @@ deleted_at: ?i64,
             data.password_hash,
             data.is_active,
             data.updated_at,
+            data.phone,
+            data.bio,
         };
     }
 
     pub fn upsertSQL() []const u8 {
         return
             \\INSERT INTO users (
-            \\    email, name, password_hash, is_active
-            \\) VALUES ($1, $2, $3, $4)
+            \\    email, name, password_hash, is_active, phone, bio
+            \\) VALUES ($1, $2, $3, $4, $5, $6)
             \\ON CONFLICT (email) DO UPDATE SET
             \\    name = EXCLUDED.name,
             \\    password_hash = EXCLUDED.password_hash,
             \\    is_active = EXCLUDED.is_active,
+            \\    phone = EXCLUDED.phone,
+            \\    bio = EXCLUDED.bio,
             \\    updated_at = CURRENT_TIMESTAMP
             \\RETURNING id
         ;
@@ -131,12 +151,16 @@ deleted_at: ?i64,
         []const u8,
         []const u8,
         ?bool,
+        ?[]const u8,
+        ?[]const u8,
     } {
         return .{
             data.email,
             data.name,
             data.password_hash,
             data.is_active,
+            data.phone,
+            data.bio,
         };
     }
 
@@ -187,6 +211,8 @@ deleted_at: ?i64,
         created_at: i64,
         updated_at: i64,
         deleted_at: ?i64,
+        phone: ?[]const u8,
+        bio: ?[]const u8,
     };
 
     /// Convert model to JSON-safe response with UUIDs as hex strings
@@ -200,6 +226,8 @@ deleted_at: ?i64,
             .created_at = self.created_at,
             .updated_at = self.updated_at,
             .deleted_at = self.deleted_at,
+            .phone = self.phone,
+            .bio = self.bio,
         };
     }
 
@@ -212,6 +240,8 @@ deleted_at: ?i64,
         created_at: i64,
         updated_at: i64,
         deleted_at: ?i64,
+        phone: ?[]const u8,
+        bio: ?[]const u8,
     };
 
     /// Convert model to JSON-safe response excluding redacted fields (passwords, tokens, etc.)
@@ -224,6 +254,8 @@ deleted_at: ?i64,
             .created_at = self.created_at,
             .updated_at = self.updated_at,
             .deleted_at = self.deleted_at,
+            .phone = self.phone,
+            .bio = self.bio,
         };
     }
     // Relationship methods

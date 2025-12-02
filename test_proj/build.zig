@@ -68,21 +68,6 @@ pub fn build(b: *std.Build) void {
     const gen_models_step = b.step("generate-models", "Generate model files from schemas");
     gen_models_step.dependOn(&b.addRunArtifact(runner_exe).step);
 
-    // Step 3: Test schema merging
-    const merge_test_exe = b.addExecutable(.{
-        .name = "merge-test",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("schemas/test_merge.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "fluentorm", .module = fluentorm },
-            },
-        }),
-    });
-    const test_merge_step = b.step("test-merge", "Test schema merging functionality");
-    test_merge_step.dependOn(&b.addRunArtifact(merge_test_exe).step);
-
     // Test step
     const mod_tests = b.addTest(.{
         .root_module = mod,
