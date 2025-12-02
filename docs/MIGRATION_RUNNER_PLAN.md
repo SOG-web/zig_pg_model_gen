@@ -16,7 +16,7 @@ This document outlines the plan for implementing a comprehensive migration syste
 | Phase 2: Snapshot System  | ✅ COMPLETE | `src/snapshot.zig` - saves/loads schema state to JSON               |
 | Phase 3: Diff Engine      | ✅ COMPLETE | `src/diff.zig` - detects changes between snapshots                  |
 | Phase 4: Migration Files  | ✅ COMPLETE | `src/sql_generator.zig` - generates one file per change             |
-| Phase 5: Migration Runner | 🔲 TODO     | Execute migrations against database                                 |
+| Phase 5: Migration Runner | ✅ COMPLETE | `src/migration_runner.zig` - executes migrations via pg.zig         |
 | Phase 6: Update & Docs    | 🔲 TODO     | Update documentation                                                |
 
 ### Completed Components
@@ -48,8 +48,16 @@ This document outlines the plan for implementing a comprehensive migration syste
   - Generates `registry.zig` with `getAllSchemas()`
 
 - **`src/generate_model.zig`** - CLI that generates runner.zig
+
   - Updated to use snapshot/diff/incremental approach
   - Configurable paths (schemas_dir, output_dir, sql_output_dir)
+
+- **`src/migration_runner.zig`** - Migration runner using pg.zig
+  - Connects to PostgreSQL using environment variables
+  - Creates `_fluent_migrations` tracking table
+  - Scans migrations directory for pending migrations
+  - Executes migrations in transaction with checksum verification
+  - Supports: `up` (apply), `status` (show pending), `down` (rollback)
 
 ### Migration File Naming
 

@@ -11,10 +11,6 @@ const RelationshipSnapshot = snapshot.RelationshipSnapshot;
 const HasManySnapshot = snapshot.HasManySnapshot;
 const DatabaseSnapshot = snapshot.DatabaseSnapshot;
 
-// ============================================================================
-// Change Types
-// ============================================================================
-
 pub const ChangeType = enum {
     add,
     remove,
@@ -47,7 +43,6 @@ pub const TableChange = struct {
     table_name: []const u8,
     old_table: ?TableSnapshot = null,
     new_table: ?TableSnapshot = null,
-    // Detailed changes for modified tables
     field_changes: []const FieldChange = &.{},
     index_changes: []const IndexChange = &.{},
     relationship_changes: []const RelationshipChange = &.{},
@@ -67,11 +62,6 @@ pub const SchemaDiff = struct {
     }
 };
 
-// ============================================================================
-// Diff Functions
-// ============================================================================
-
-/// Compare two database snapshots and return the differences
 pub fn diffSnapshots(
     allocator: std.mem.Allocator,
     old_snapshot: ?DatabaseSnapshot,
@@ -128,7 +118,7 @@ pub fn diffSnapshots(
     };
 }
 
-/// Find a table by name in a slice
+// Find a table by name in a slice
 fn findTable(tables: []const TableSnapshot, name: []const u8) ?TableSnapshot {
     for (tables) |table| {
         if (std.mem.eql(u8, table.name, name)) {
@@ -138,7 +128,7 @@ fn findTable(tables: []const TableSnapshot, name: []const u8) ?TableSnapshot {
     return null;
 }
 
-/// Compare two tables and return field/index/relationship changes
+// Compare two tables and return field/index/relationship changes
 fn diffTables(
     allocator: std.mem.Allocator,
     old_table: TableSnapshot,
@@ -155,7 +145,7 @@ fn diffTables(
     };
 }
 
-/// Compare fields between old and new table
+// Compare fields between old and new table
 fn diffFields(
     allocator: std.mem.Allocator,
     old_fields: []const FieldSnapshot,
@@ -199,7 +189,7 @@ fn diffFields(
     return changes.toOwnedSlice(allocator);
 }
 
-/// Find a field by name
+// Find a field by name
 fn findField(fields: []const FieldSnapshot, name: []const u8) ?FieldSnapshot {
     for (fields) |field| {
         if (std.mem.eql(u8, field.name, name)) {
@@ -209,7 +199,7 @@ fn findField(fields: []const FieldSnapshot, name: []const u8) ?FieldSnapshot {
     return null;
 }
 
-/// Check if two fields are equal
+// Check if two fields are equal
 fn fieldsEqual(a: FieldSnapshot, b: FieldSnapshot) bool {
     if (!std.mem.eql(u8, a.type, b.type)) return false;
     if (a.primary_key != b.primary_key) return false;
@@ -232,7 +222,7 @@ fn fieldsEqual(a: FieldSnapshot, b: FieldSnapshot) bool {
     return true;
 }
 
-/// Compare indexes between old and new table
+// Compare indexes between old and new table
 fn diffIndexes(
     allocator: std.mem.Allocator,
     old_indexes: []const IndexSnapshot,
@@ -274,7 +264,7 @@ fn diffIndexes(
     return changes.toOwnedSlice(allocator);
 }
 
-/// Find an index by name
+// Find an index by name
 fn findIndex(indexes: []const IndexSnapshot, name: []const u8) ?IndexSnapshot {
     for (indexes) |index| {
         if (std.mem.eql(u8, index.name, name)) {
@@ -284,7 +274,7 @@ fn findIndex(indexes: []const IndexSnapshot, name: []const u8) ?IndexSnapshot {
     return null;
 }
 
-/// Check if two indexes are equal
+// Check if two indexes are equal
 fn indexesEqual(a: IndexSnapshot, b: IndexSnapshot) bool {
     if (a.unique != b.unique) return false;
     if (a.columns.len != b.columns.len) return false;
@@ -294,7 +284,7 @@ fn indexesEqual(a: IndexSnapshot, b: IndexSnapshot) bool {
     return true;
 }
 
-/// Compare relationships between old and new table
+// Compare relationships between old and new table
 fn diffRelationships(
     allocator: std.mem.Allocator,
     old_rels: []const RelationshipSnapshot,
@@ -336,7 +326,7 @@ fn diffRelationships(
     return changes.toOwnedSlice(allocator);
 }
 
-/// Find a relationship by name
+// Find a relationship by name
 fn findRelationship(rels: []const RelationshipSnapshot, name: []const u8) ?RelationshipSnapshot {
     for (rels) |rel| {
         if (std.mem.eql(u8, rel.name, name)) {
@@ -346,7 +336,7 @@ fn findRelationship(rels: []const RelationshipSnapshot, name: []const u8) ?Relat
     return null;
 }
 
-/// Check if two relationships are equal
+// Check if two relationships are equal
 fn relationshipsEqual(a: RelationshipSnapshot, b: RelationshipSnapshot) bool {
     if (!std.mem.eql(u8, a.column, b.column)) return false;
     if (!std.mem.eql(u8, a.references_table, b.references_table)) return false;
@@ -357,11 +347,7 @@ fn relationshipsEqual(a: RelationshipSnapshot, b: RelationshipSnapshot) bool {
     return true;
 }
 
-// ============================================================================
-// Utility Functions
-// ============================================================================
-
-/// Print a human-readable summary of the diff
+// Print a human-readable summary of the diff
 pub fn printDiff(diff: SchemaDiff, writer: anytype) !void {
     if (!diff.has_changes) {
         try writer.writeAll("No schema changes detected.\n");
@@ -415,10 +401,6 @@ pub fn printDiff(diff: SchemaDiff, writer: anytype) !void {
         try writer.writeAll("\n");
     }
 }
-
-// ============================================================================
-// Tests
-// ============================================================================
 
 test "detect new table" {
     const allocator = std.testing.allocator;

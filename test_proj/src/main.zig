@@ -9,10 +9,8 @@ pub fn main() !void {
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
     try test_proj.bufferedPrint();
 
-    const select_fields: []const models.User.FieldEnum = &.{ .id, .name };
-
-    const user = models.User.query();
-    _ = user.select(select_fields).where(.{
+    var user = models.Users.query();
+    _ = user.select(&.{.id}).where(.{
         .field = .email,
         .operator = .eq,
         .value = "rou@rou.com",
