@@ -171,6 +171,10 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             self.group_clauses.clearAndFree(self.arena.allocator());
             self.having_clauses.clearAndFree(self.arena.allocator());
             self.join_clauses.clearAndFree(self.arena.allocator());
+            self.limit_val: ?u64 = null,
+            self.offset_val: ?u64 = null,
+            self.include_deleted: bool = false,
+            self.distinct_enabled: bool = false,
         }
 
         /// Add a SELECT clause
