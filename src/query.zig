@@ -158,6 +158,21 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             self.arena.deinit();
         }
 
+        /// Reset the query - clear all clauses, this makes the query builder reusable
+        ///
+        /// Example:
+        /// ```zig
+        /// .reset()
+        /// ```
+        pub fn reset(self: *Self) void {
+            self.where_clauses.clearAndFree(self.arena.allocator());
+            self.select_clauses.clearAndFree(self.arena.allocator());
+            self.order_clauses.clearAndFree(self.arena.allocator());
+            self.group_clauses.clearAndFree(self.arena.allocator());
+            self.having_clauses.clearAndFree(self.arena.allocator());
+            self.join_clauses.clearAndFree(self.arena.allocator());
+        }
+
         /// Add a SELECT clause
         ///
         /// Example:
