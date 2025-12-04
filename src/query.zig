@@ -4,6 +4,7 @@ const pg = @import("pg");
 
 /// Query builder for BaseModel operations
 pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type {
+    _ = K;
     if (!@hasDecl(T, "tableName")) {
         @compileError("Struct must have a tableName field");
     }
@@ -890,10 +891,10 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             });
             defer result.deinit();
 
-            var items = std.ArrayList(K){};
+            var items = std.ArrayList(T){};
             errdefer items.deinit(allocator);
 
-            var mapper = result.mapper(K, .{ .allocator = allocator });
+            var mapper = result.mapper(T, .{ .allocator = allocator });
             while (try mapper.next()) |item| {
                 try items.append(allocator, item);
             }
@@ -977,7 +978,7 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             });
             defer result.deinit();
 
-            var mapper = result.mapper(K, .{ .allocator = allocator });
+            var mapper = result.mapper(T, .{ .allocator = allocator });
             if (try mapper.next()) |item| {
                 return item;
             }
