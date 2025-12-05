@@ -298,7 +298,7 @@ pub fn uuid(self: *TableSchema, field: FieldInput) void {
         .create_input = field.create_input,
         .update_input = field.update_input,
         .redacted = field.redacted,
-        .default_value = field.default_value,
+        .default_value = "gen_random_uuid()",
         .auto_generated = field.auto_generated,
         .auto_generate_type = .uuid,
     }) catch |err| {
