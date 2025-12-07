@@ -21,7 +21,7 @@ zig init
 Add FluentORM to your project:
 
 ```bash
-zig fetch --save git+https://github.com/your-username/fluentorm#main
+zig fetch --save git+https://github.com/SOG-web/fluentorm#main
 ```
 
 This updates `build.zig.zon`:
@@ -29,7 +29,7 @@ This updates `build.zig.zon`:
 ```zig
 .dependencies = .{
     .fluentorm = .{
-        .url = "git+https://github.com/your-username/fluentorm#<hash>",
+        .url = "git+https://github.com/SOG-web/fluentorm#<hash>",
         .hash = "<hash>",
     },
 },
@@ -135,7 +135,7 @@ Create `schemas/01_users.zig`:
 ```zig
 const fluentorm = @import("fluentorm");
 const TableSchema = fluentorm.TableSchema;
-
+pub const table_name = "users";
 pub fn build(t: *TableSchema) void {
     // Primary key
     t.uuid(.{
@@ -325,7 +325,7 @@ Create `schemas/02_posts.zig`:
 ```zig
 const fluentorm = @import("fluentorm");
 const TableSchema = fluentorm.TableSchema;
-
+pub const table_name = "posts";
 pub fn build(t: *TableSchema) void {
     t.uuid(.{
         .name = "id",
@@ -362,6 +362,8 @@ And update `schemas/01_users.zig` to add hasMany:
 ```zig
 const fluentorm = @import("fluentorm");
 const TableSchema = fluentorm.TableSchema;
+
+pub const table_name = "users";
 
 pub fn build(t: *TableSchema) void {
     // ... existing fields ...
@@ -410,11 +412,11 @@ if (try post.fetchPostAuthor(&pool, allocator)) |author| {
 
 ### Explore Advanced Features
 
-- **Complex Queries**: [QUERY.md](docs/QUERY.md)
-- **Transactions**: [TRANSACTION.md](docs/TRANSACTION.md)
-- **Relationships**: [RELATIONSHIPS.md](docs/RELATIONSHIPS.md)
-- **Field Types**: [SCHEMA.md](docs/SCHEMA.md)
-- **Migrations**: [MIGRATIONS.md](docs/MIGRATIONS.md)
+- **Complex Queries**: [QUERY.md](QUERY.md)
+- **Transactions**: [TRANSACTION.md](TRANSACTION.md)
+- **Relationships**: [RELATIONSHIPS.md](RELATIONSHIPS.md)
+- **Field Types**: [SCHEMA.md](SCHEMA.md)
+- **Migrations**: [MIGRATIONS.md](MIGRATIONS.md)
 
 ## Common Issues
 
