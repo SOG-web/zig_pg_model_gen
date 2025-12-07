@@ -60,6 +60,7 @@ pub fn build(t: *TableSchema) void {
     t.dateTime(.{
         .name = "updated_at",
         .create_input = .excluded,
+        .update_input = false,
         .default_value = "CURRENT_TIMESTAMP",
         .auto_generated = true,
     });
