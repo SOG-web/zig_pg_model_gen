@@ -510,7 +510,6 @@ fn generateUpdateSQL(writer: anytype, schema: TableSchema, fields: []const Field
         }
     }
 
-    try writer.writeAll("            \\\\    updated_at = CURRENT_TIMESTAMP\n");
     try writer.writeAll("            \\\\WHERE id = $1\n");
     try writer.writeAll("        ;\n");
     try writer.writeAll("    }\n\n");
@@ -594,7 +593,6 @@ fn generateUpsertSQL(writer: anytype, schema: TableSchema, fields: []const Field
         }
     }
 
-    try writer.writeAll("            \\\\    updated_at = CURRENT_TIMESTAMP\n");
     try writer.writeAll("            \\\\RETURNING id\n");
     try writer.writeAll("        ;\n");
     try writer.writeAll("    }\n\n");
