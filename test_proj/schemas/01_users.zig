@@ -62,6 +62,7 @@ pub fn build(t: *TableSchema) void {
         .create_input = .excluded,
         .default_value = "CURRENT_TIMESTAMP",
         .auto_generated = true,
+        .update_input = false,
     });
 
     // Soft delete support

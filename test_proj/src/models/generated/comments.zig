@@ -146,10 +146,6 @@ deleted_at: ?i64,
 
     pub const updateAndReturn = base.updateAndReturn;
 
-    pub const upsert = base.upsert;
-
-    pub const upsertAndReturn = base.upsertAndReturn;
-
     pub const softDelete = base.softDelete;
 
     pub const hardDelete = base.hardDelete;

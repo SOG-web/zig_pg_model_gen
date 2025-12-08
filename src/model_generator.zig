@@ -223,7 +223,7 @@ pub fn generateModel(allocator: std.mem.Allocator, schema: TableSchema, schema_f
     try generateUpdateInput(writer, final_fields, allocator);
 
     // Generate SQL methods
-    try generateSQLMethods(writer, schema, struct_name, final_fields, allocator);
+    const has_upsert = try generateSQLMethods(writer, schema, struct_name, final_fields, allocator);
 
     // Generate base
     try generateBaseModelWrapper(writer, struct_name);
@@ -232,7 +232,7 @@ pub fn generateModel(allocator: std.mem.Allocator, schema: TableSchema, schema_f
     try generateDDLWrappers(writer);
 
     // Generate CRUD wrappers
-    try generateCRUDWrappers(writer, struct_name);
+    try generateCRUDWrappers(writer, struct_name, has_upsert);
 
     // Generate JSON response helpers
     try generateJsonResponseHelpers(writer, struct_name, final_fields);
@@ -376,7 +376,7 @@ fn generateUpdateInput(writer: anytype, fields: []const Field, allocator: std.me
     try writer.writeAll("    };\n\n");
 }
 
-fn generateSQLMethods(writer: anytype, schema: TableSchema, struct_name: []const u8, fields: []const Field, allocator: std.mem.Allocator) !void {
+fn generateSQLMethods(writer: anytype, schema: TableSchema, struct_name: []const u8, fields: []const Field, allocator: std.mem.Allocator) !bool {
     _ = struct_name;
     // tableName - uses table name (snake_case) for SQL
     try writer.print(
@@ -395,7 +395,8 @@ fn generateSQLMethods(writer: anytype, schema: TableSchema, struct_name: []const
     try generateUpdateSQL(writer, schema, fields, allocator);
 
     // upsertSQL
-    try generateUpsertSQL(writer, schema, fields, allocator);
+    const has_upsert = try generateUpsertSQL(writer, schema, fields, allocator);
+    return has_upsert;
 }
 
 fn generateInsertSQL(writer: anytype, schema: TableSchema, fields: []const Field, allocator: std.mem.Allocator) !void {
@@ -495,6 +496,13 @@ fn generateUpdateSQL(writer: anytype, schema: TableSchema, fields: []const Field
                 try param_types.append(arena_allocator, optional_type);
             }
         }
+        if (std.mem.eql(u8, field.name, "updated_at") and !field.update_input) {
+            const sqlType = field.type.toPgType();
+            if (std.mem.eql(u8, sqlType, "TIMESTAMP")) {
+                const update_str = try std.fmt.allocPrint(arena_allocator, "            \\\\    {s} =  CURRENT_TIMESTAMP", .{field.name});
+                try updates.append(arena_allocator, update_str);
+            }
+        }
     }
 
     try writer.writeAll("    pub fn updateSQL() []const u8 {\n");
@@ -532,7 +540,7 @@ fn generateUpdateSQL(writer: anytype, schema: TableSchema, fields: []const Field
     try writer.writeAll("    }\n\n");
 }
 
-fn generateUpsertSQL(writer: anytype, schema: TableSchema, fields: []const Field, allocator: std.mem.Allocator) !void {
+fn generateUpsertSQL(writer: anytype, schema: TableSchema, fields: []const Field, allocator: std.mem.Allocator) !bool {
     // Find unique field for ON CONFLICT
     var unique_field: ?[]const u8 = null;
     for (fields) |field| {
@@ -544,7 +552,7 @@ fn generateUpsertSQL(writer: anytype, schema: TableSchema, fields: []const Field
 
     if (unique_field == null) {
         // No unique field, skip upsert
-        return;
+        return false;
     }
 
     var arena = std.heap.ArenaAllocator.init(allocator);
@@ -622,6 +630,7 @@ fn generateUpsertSQL(writer: anytype, schema: TableSchema, fields: []const Field
 
     try writer.writeAll("        };\n");
     try writer.writeAll("    }\n\n");
+    return true;
 }
 
 fn generateBaseModelWrapper(writer: anytype, struct_name: []const u8) !void {
@@ -640,7 +649,7 @@ fn generateDDLWrappers(writer: anytype) !void {
     );
 }
 
-fn generateCRUDWrappers(writer: anytype, struct_name: []const u8) !void {
+fn generateCRUDWrappers(writer: anytype, struct_name: []const u8, has_upsert: bool) !void {
     try writer.writeAll(
         \\    // CRUD operations
         \\    pub const findById = base.findById;
@@ -655,10 +664,20 @@ fn generateCRUDWrappers(writer: anytype, struct_name: []const u8) !void {
         \\
         \\    pub const updateAndReturn = base.updateAndReturn;
         \\
-        \\    pub const upsert = base.upsert;
         \\
-        \\    pub const upsertAndReturn = base.upsertAndReturn;
-        \\
+    );
+
+    if (has_upsert) {
+        try writer.writeAll(
+            \\    pub const upsert = base.upsert;
+            \\
+            \\    pub const upsertAndReturn = base.upsertAndReturn;
+            \\
+            \\
+        );
+    }
+
+    try writer.writeAll(
         \\    pub const softDelete = base.softDelete;
         \\
         \\    pub const hardDelete = base.hardDelete;

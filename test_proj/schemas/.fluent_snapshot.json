@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "created_at": 1765146706,
+  "created_at": 1765179470,
   "tables": [
     {
       "name": "users",
@@ -222,8 +222,8 @@
           "primary_key": false,
           "unique": false,
           "not_null": false,
-          "default_value": null,
-          "auto_generated": false,
+          "default_value": "CURRENT_TIMESTAMP",
+          "auto_generated": true,
           "auto_generate_type": "timestamp"
         }
       ],

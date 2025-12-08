@@ -60,7 +60,6 @@ bio: ?[]const u8,
         bid: ?[]const u8 = null,
         password_hash: ?[]const u8 = null,
         is_active: ?bool = null,
-        updated_at: ?i64 = null,
         phone: ?[]const u8 = null,
         bio: ?[]const u8 = null,
     };
@@ -107,9 +106,9 @@ bio: ?[]const u8,
             \\    bid = COALESCE($4, bid),
             \\    password_hash = COALESCE($5, password_hash),
             \\    is_active = COALESCE($6, is_active),
-            \\    updated_at = COALESCE($7, updated_at),
-            \\    phone = COALESCE($8, phone),
-            \\    bio = COALESCE($9, bio)
+            \\    updated_at =  CURRENT_TIMESTAMP,
+            \\    phone = COALESCE($7, phone),
+            \\    bio = COALESCE($8, bio)
             \\WHERE id = $1
         ;
     }
@@ -121,7 +120,6 @@ bio: ?[]const u8,
         ?[]const u8,
         ?[]const u8,
         ?bool,
-        ?i64,
         ?[]const u8,
         ?[]const u8,
     } {
@@ -132,7 +130,6 @@ bio: ?[]const u8,
             data.bid,
             data.password_hash,
             data.is_active,
-            data.updated_at,
             data.phone,
             data.bio,
         };

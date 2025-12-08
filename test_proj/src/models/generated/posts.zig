@@ -90,7 +90,8 @@ deleted_at: ?i64,
             \\    content = COALESCE($3, content),
             \\    user_id = COALESCE($4, user_id),
             \\    is_published = COALESCE($5, is_published),
-            \\    view_count = COALESCE($6, view_count)
+            \\    view_count = COALESCE($6, view_count),
+            \\    updated_at =  CURRENT_TIMESTAMP
             \\WHERE id = $1
         ;
     }
@@ -132,10 +133,6 @@ deleted_at: ?i64,
     pub const update = base.update;
 
     pub const updateAndReturn = base.updateAndReturn;
-
-    pub const upsert = base.upsert;
-
-    pub const upsertAndReturn = base.upsertAndReturn;
 
     pub const softDelete = base.softDelete;
 

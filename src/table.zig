@@ -325,6 +325,54 @@ pub fn dateTime(self: *TableSchema, field: FieldInput) void {
     };
 }
 
+/// Adds standard created_at and updated_at timestamp fields to the table schema.
+pub fn timestamps(self: *TableSchema) void {
+    if (self.err != null) return;
+    self.fields.append(self.allocator, .{
+        .name = "created_at",
+        .type = .timestamp,
+        .not_null = true,
+        .create_input = .excluded,
+        .update_input = false,
+        .redacted = false,
+        .default_value = "CURRENT_TIMESTAMP",
+        .auto_generated = true,
+        .auto_generate_type = .timestamp,
+    }) catch |err| {
+        self.err = err;
+    };
+    self.fields.append(self.allocator, .{
+        .name = "updated_at",
+        .type = .timestamp,
+        .not_null = true,
+        .create_input = .excluded,
+        .update_input = false,
+        .redacted = false,
+        .default_value = "CURRENT_TIMESTAMP",
+        .auto_generated = true,
+        .auto_generate_type = .timestamp,
+    }) catch |err| {
+        self.err = err;
+    };
+}
+
+pub fn softDelete(self: *TableSchema) void {
+    if (self.err != null) return;
+    self.fields.append(self.allocator, .{
+        .name = "deleted_at",
+        .type = .timestamp_optional,
+        .not_null = false,
+        .create_input = .excluded,
+        .update_input = false,
+        .redacted = false,
+        .default_value = "CURRENT_TIMESTAMP",
+        .auto_generated = true,
+        .auto_generate_type = .timestamp,
+    }) catch |err| {
+        self.err = err;
+    };
+}
+
 pub fn float(self: *TableSchema, field: FieldInput) void {
     if (self.err != null) return;
     self.fields.append(self.allocator, .{

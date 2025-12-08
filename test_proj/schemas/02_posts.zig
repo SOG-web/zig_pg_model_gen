@@ -49,29 +49,10 @@ pub fn build(t: *TableSchema) void {
     });
 
     // Timestamps - auto-generated
-    t.dateTime(.{
-        .name = "created_at",
-        .create_input = .excluded,
-        .update_input = false,
-        .default_value = "CURRENT_TIMESTAMP",
-        .auto_generated = true,
-    });
-
-    t.dateTime(.{
-        .name = "updated_at",
-        .create_input = .excluded,
-        .update_input = false,
-        .default_value = "CURRENT_TIMESTAMP",
-        .auto_generated = true,
-    });
+    t.timestamps();
 
     // Soft delete support
-    t.dateTime(.{
-        .name = "deleted_at",
-        .not_null = false,
-        .create_input = .excluded,
-        .update_input = false,
-    });
+    t.softDelete();
 
     // Relationship: post belongs to user (many-to-one) - using convenience method!
     t.belongsTo(.{
