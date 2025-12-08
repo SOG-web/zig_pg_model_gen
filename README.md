@@ -122,29 +122,11 @@ pub fn build(t: *TableSchema) void {
     t.string(.{ .name = "name" });
     t.string(.{ .name = "password_hash", .redacted = true });
 
-    // Timestamps - auto-generated
-    t.dateTime(.{
-        .name = "created_at",
-        .create_input = .excluded,
-        .update_input = false,
-        .default_value = "CURRENT_TIMESTAMP",
-        .auto_generated = true,
-    });
+    // Timestamps (adds created_at and updated_at)
+    t.timestamps();
 
-    t.dateTime(.{
-        .name = "updated_at",
-        .create_input = .excluded,
-        .default_value = "CURRENT_TIMESTAMP",
-        .auto_generated = true,
-    });
-
-    // Soft delete support
-    t.dateTime(.{
-        .name = "deleted_at",
-        .not_null = false,
-        .create_input = .excluded,
-        .update_input = false,
-    });
+    // Soft delete support (adds deleted_at)
+    t.softDelete();
 }
 ```
 

@@ -308,6 +308,15 @@ t.uuid(.{
 
 ### Timestamps
 
+Use the `timestamps()` convenience method to add standard `created_at` and `updated_at` fields:
+
+```zig
+// Adds both created_at and updated_at timestamp fields
+t.timestamps();
+```
+
+This is equivalent to manually defining:
+
 ```zig
 // Created at - never updated
 t.dateTime(.{
@@ -328,6 +337,15 @@ t.dateTime(.{
 ```
 
 ### Soft Deletes
+
+Use the `softDelete()` convenience method to add a `deleted_at` field for soft delete support:
+
+```zig
+// Adds deleted_at timestamp field for soft deletes
+t.softDelete();
+```
+
+This is equivalent to manually defining:
 
 ```zig
 t.dateTime(.{
@@ -550,29 +568,11 @@ pub fn build(t: *TableSchema) void {
         .default_value = "0",
     });
 
-    // Timestamps
-    t.dateTime(.{
-        .name = "created_at",
-        .create_input = .excluded,
-        .update_input = false,
-        .default_value = "CURRENT_TIMESTAMP",
-        .auto_generated = true,
-    });
+    // Timestamps (adds created_at and updated_at)
+    t.timestamps();
 
-    t.dateTime(.{
-        .name = "updated_at",
-        .create_input = .excluded,
-        .default_value = "CURRENT_TIMESTAMP",
-        .auto_generated = true,
-    });
-
-    // Soft delete support
-    t.dateTime(.{
-        .name = "deleted_at",
-        .not_null = false,
-        .create_input = .excluded,
-        .update_input = false,
-    });
+    // Soft delete support (adds deleted_at)
+    t.softDelete();
 }
 ```
 
