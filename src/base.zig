@@ -197,7 +197,7 @@ pub fn BaseModel(comptime T: type) type {
                 try sql_builder.append(temp_alloc, "(");
                 for (0..params_per_row) |j| {
                     if (j > 0) try sql_builder.append(temp_alloc, ",");
-                    try sql_builder.writer().print("${d}", .{param_counter});
+                    try sql_builder.writer().print("${s}{d}", .{ "$", param_counter });
                     param_counter += 1;
                 }
                 try sql_builder.append(temp_alloc, ')');

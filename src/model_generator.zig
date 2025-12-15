@@ -345,7 +345,7 @@ fn generateDeinit(writer: anytype, fields: []const Field, allocator: std.mem.All
 
     for (fields) |field| {
         const zig_type = field.type.toZigType();
-        if (std.mem.indexOf(u8, zig_type, "[]const u8") != null) {
+        if (std.mem.eql(u8, zig_type, "[]const u8") or std.mem.eql(u8, zig_type, "?[]const u8")) {
             if (field.type.isOptional()) {
                 try writer.print("        if (self.{s}) |v| allocator.free(v);\n", .{field.name});
             } else {
