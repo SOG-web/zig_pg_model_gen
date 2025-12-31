@@ -131,7 +131,9 @@ pub fn BaseModel(comptime T: type) type {
             const sql = T.insertSQL();
             const params = T.insertParams(data);
 
-            var result = try db.query(sql, params);
+            var result = db.query(sql, params) catch |err| {
+                return err;
+            };
             defer result.deinit();
 
             // Get the returned ID from INSERT...RETURNING
@@ -193,11 +195,11 @@ pub fn BaseModel(comptime T: type) type {
 
             var param_counter: usize = 1;
             for (0..data_list.len) |i| {
-                if (i > 0) try sql_builder.append(temp_alloc, ",");
-                try sql_builder.append(temp_alloc, "(");
+                if (i > 0) try sql_builder.append(temp_alloc, ',');
+                try sql_builder.append(temp_alloc, '(');
                 for (0..params_per_row) |j| {
-                    if (j > 0) try sql_builder.append(temp_alloc, ",");
-                    try sql_builder.writer().print("${s}{d}", .{ "$", param_counter });
+                    if (j > 0) try sql_builder.append(temp_alloc, ',');
+                    try sql_builder.writer(temp_alloc).print("${d}", .{param_counter});
                     param_counter += 1;
                 }
                 try sql_builder.append(temp_alloc, ')');
@@ -207,22 +209,36 @@ pub fn BaseModel(comptime T: type) type {
                 try sql_builder.appendSlice(temp_alloc, suffix);
             }
 
-            const conn = try db.acquire();
+            const conn = db.acquire() catch |err| {
+                std.log.err("Failed to acquire connection: {s}\n", .{@errorName(err)});
+                return err;
+            };
             defer db.release(conn);
 
+            const query_str = sql_builder.items;
+
             // 3. Prepare and Bind
-            var stmt = try conn.prepare(sql_builder.items);
+            var stmt = conn.prepare(query_str) catch |err| {
+                std.log.err("Failed to prepare statement: {s}\n", .{@errorName(err)});
+                return err;
+            };
             defer stmt.deinit();
 
             for (data_list) |item| {
                 const params = T.insertParams(item);
                 inline for (params) |p| {
-                    try stmt.bind(p);
+                    stmt.bind(p) catch |err| {
+                        std.log.err("Failed to bind parameter: {s}\n", .{@errorName(err)});
+                        return err;
+                    };
                 }
             }
 
             // 4. Execute and collect IDs
-            var result = try stmt.execute();
+            var result = stmt.execute() catch |err| {
+                std.log.err("Failed to execute query: {s}\n", .{@errorName(err)});
+                return err;
+            };
             defer result.deinit();
 
             var ids = std.ArrayList([]const u8){};
@@ -231,7 +247,10 @@ pub fn BaseModel(comptime T: type) type {
                 ids.deinit(allocator);
             }
 
-            while (try result.next()) |row| {
+            while (result.next() catch |err| {
+                std.log.err("Failed to fetch result: {s}\n", .{@errorName(err)});
+                return err;
+            }) |row| {
                 const id = row.get([]const u8, 0);
                 try ids.append(allocator, try allocator.dupe(u8, id));
             }
@@ -270,6 +289,7 @@ pub fn BaseModel(comptime T: type) type {
             var result = try db.queryOpts(sql, params, .{
                 .column_names = true,
             });
+
             defer result.deinit();
 
             var mapper = result.mapper(T, .{ .allocator = allocator });

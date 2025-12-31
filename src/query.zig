@@ -86,6 +86,14 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
             value: ?[]const u8 = null,
         };
 
+        pub const InType = enum {
+            /// Text type for IN clauses
+            /// All values will be quoted as strings
+            string,
+            integer,
+            boolean,
+        };
+
         pub const OrderByClause = struct {
             field: Field,
             direction: enum {
@@ -299,11 +307,29 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
         /// ```zig
         /// .whereBetween(.age, "$1", "$2")
         /// ```
-        pub fn whereBetween(self: *Self, field: FE, low: []const u8, high: []const u8) *Self {
+        pub fn whereBetween(self: *Self, field: FE, low: []const u8, high: []const u8, valueType: InType) *Self {
+            const str = switch (valueType) {
+                .string => std.fmt.allocPrint(
+                    self.arena.allocator(),
+                    "'{s}' AND '{s}'",
+                    .{ low, high },
+                ) catch return self,
+                .integer => std.fmt.allocPrint(
+                    self.arena.allocator(),
+                    "{s} AND {s}",
+                    .{ low, high },
+                ) catch return self,
+                .boolean => std.fmt.allocPrint(
+                    self.arena.allocator(),
+                    "{s} AND {s}",
+                    .{ low, high },
+                ) catch return self,
+            };
+
             const sql = std.fmt.allocPrint(
                 self.arena.allocator(),
-                "{s} BETWEEN {s} AND {s}",
-                .{ @tagName(field), low, high },
+                "{s} BETWEEN {s}",
+                .{ @tagName(field), str },
             ) catch return self;
             self.where_clauses.append(self.arena.allocator(), .{
                 .sql = sql,
@@ -318,11 +344,28 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
         /// ```zig
         /// .whereNotBetween(.age, "$1", "$2")
         /// ```
-        pub fn whereNotBetween(self: *Self, field: FE, low: []const u8, high: []const u8) *Self {
+        pub fn whereNotBetween(self: *Self, field: FE, low: []const u8, high: []const u8, valueType: InType) *Self {
+            const str = switch (valueType) {
+                .string => std.fmt.allocPrint(
+                    self.arena.allocator(),
+                    "'{s}' AND '{s}'",
+                    .{ low, high },
+                ) catch return self,
+                .integer => std.fmt.allocPrint(
+                    self.arena.allocator(),
+                    "{s} AND {s}",
+                    .{ low, high },
+                ) catch return self,
+                .boolean => std.fmt.allocPrint(
+                    self.arena.allocator(),
+                    "{s} AND {s}",
+                    .{ low, high },
+                ) catch return self,
+            };
             const sql = std.fmt.allocPrint(
                 self.arena.allocator(),
-                "{s} NOT BETWEEN {s} AND {s}",
-                .{ @tagName(field), low, high },
+                "{s} NOT BETWEEN {s}",
+                .{ @tagName(field), str },
             ) catch return self;
             self.where_clauses.append(self.arena.allocator(), .{
                 .sql = sql,
@@ -337,11 +380,25 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
         /// ```zig
         /// .whereIn(.status, &.{ "'active'", "'pending'" })
         /// ```
-        pub fn whereIn(self: *Self, field: FE, values: []const []const u8) *Self {
+        pub fn whereIn(self: *Self, field: FE, values: []const []const u8, valueType: InType) *Self {
             var values_str = std.ArrayList(u8){};
             values_str.appendSlice(self.arena.allocator(), "(") catch return self;
             for (values, 0..) |val, i| {
+                switch (valueType) {
+                    .string => {
+                        values_str.append(self.arena.allocator(), '\'') catch return self;
+                    },
+                    .integer => {},
+                    .boolean => {},
+                }
                 values_str.appendSlice(self.arena.allocator(), val) catch return self;
+                switch (valueType) {
+                    .string => {
+                        values_str.append(self.arena.allocator(), '\'') catch return self;
+                    },
+                    .integer => {},
+                    .boolean => {},
+                }
                 if (i < values.len - 1) {
                     values_str.appendSlice(self.arena.allocator(), ", ") catch return self;
                 }
@@ -366,11 +423,25 @@ pub fn QueryBuilder(comptime T: type, comptime K: type, comptime FE: type) type 
         /// ```zig
         /// .whereNotIn(.status, &.{ "'deleted'", "'archived'" })
         /// ```
-        pub fn whereNotIn(self: *Self, field: FE, values: []const []const u8) *Self {
+        pub fn whereNotIn(self: *Self, field: FE, values: []const []const u8, valueType: InType) *Self {
             var values_str = std.ArrayList(u8){};
             values_str.appendSlice(self.arena.allocator(), "(") catch return self;
             for (values, 0..) |val, i| {
+                switch (valueType) {
+                    .string => {
+                        values_str.append(self.arena.allocator(), '\'') catch return self;
+                    },
+                    .integer => {},
+                    .boolean => {},
+                }
                 values_str.appendSlice(self.arena.allocator(), val) catch return self;
+                switch (valueType) {
+                    .string => {
+                        values_str.append(self.arena.allocator(), '\'') catch return self;
+                    },
+                    .integer => {},
+                    .boolean => {},
+                }
                 if (i < values.len - 1) {
                     values_str.appendSlice(self.arena.allocator(), ", ") catch return self;
                 }
