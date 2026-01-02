@@ -766,7 +766,7 @@ fn generateJsonResponseHelpers(writer: anytype, struct_name: []const u8, fields:
         if (field.type == .uuid) {
             try writer.print("try pg.uuidToHex(&self.{s}[0..16].*)", .{field.name});
         } else if (field.type == .uuid_optional) {
-            try writer.print("if (self.{s}) |id| try pg.uuidToHex(&id[0..16].*) else null,", .{field.name});
+            try writer.print("if (self.{s}) |id| try pg.uuidToHex(&id[0..16].*) else null", .{field.name});
         } else {
             try writer.print("self.{s}", .{field.name});
         }
@@ -815,7 +815,7 @@ fn generateJsonResponseHelpers(writer: anytype, struct_name: []const u8, fields:
         if (field.type == .uuid) {
             try writer.print("try pg.uuidToHex(&self.{s}[0..16].*)", .{field.name});
         } else if (field.type == .uuid_optional) {
-            try writer.print("if (self.{s}) |id| try pg.uuidToHex(&id[0..16].*) else null,", .{field.name});
+            try writer.print("if (self.{s}) |id| try pg.uuidToHex(&id[0..16].*) else null", .{field.name});
         } else {
             try writer.print("self.{s}", .{field.name});
         }
