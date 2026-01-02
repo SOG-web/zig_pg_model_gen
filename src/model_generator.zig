@@ -740,8 +740,10 @@ fn generateJsonResponseHelpers(writer: anytype, struct_name: []const u8, fields:
         try writer.print("{s}: ", .{field.name});
 
         // Convert UUID fields to [36]u8 hex strings
-        if (field.type == .uuid or field.type == .uuid_optional) {
+        if (field.type == .uuid) {
             try writer.writeAll("[36]u8");
+        } else if (field.type == .uuid_optional) {
+            try writer.writeAll("?[36]u8");
         } else {
             // Keep the same type for non-UUID fields
             const zig_type = field.type.toZigType();
@@ -787,8 +789,10 @@ fn generateJsonResponseHelpers(writer: anytype, struct_name: []const u8, fields:
         try writer.print("{s}: ", .{field.name});
 
         // Convert UUID fields to [36]u8 hex strings
-        if (field.type == .uuid or field.type == .uuid_optional) {
+        if (field.type == .uuid) {
             try writer.writeAll("[36]u8");
+        } else if (field.type == .uuid_optional) {
+            try writer.writeAll("?[36]u8");
         } else {
             // Keep the same type for non-UUID fields
             const zig_type = field.type.toZigType();
